@@ -1,0 +1,2 @@
+# Homography-based 2D Visual Servoing
+Implementation of [Homography-based 2D Visual Servoing](https://ieeexplore.ieee.org/document/1642061) S. Benhimane and E. Malis with ROS integration and homography estimation algorithms.
