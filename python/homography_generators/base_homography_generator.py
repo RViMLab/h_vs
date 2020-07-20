@@ -3,7 +3,7 @@ import numpy as np
 
 
 class BaseHomographyGenerator(ABC):
-    def __init__(self, K: np.array, d: np.array, buffer_size: int, undistort=False: bool):
+    def __init__(self, K: np.array, d: np.array, buffer_size: int, undistort: bool=False):
         self._imgs = []
         self._K = K
         self._d = d
