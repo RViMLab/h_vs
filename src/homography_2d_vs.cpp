@@ -1,8 +1,8 @@
 #include <h_vs/homography_2d_vs.h>
 
 
-Homography2DVisualServo::Homography2DVisualServo(Eigen::Matrix3d& K)
-    : _K(K) {   };
+Homography2DVisualServo::Homography2DVisualServo(Eigen::Matrix3d& K, Eigen::Vector3d& lambda_v, Eigen::Vector3d& lambda_w)
+    : _K(K), _lambda_v(lambda_v), _lambda_w(lambda_w) {   };
 
 
 // eq. 15 and 16, see paper
@@ -11,11 +11,27 @@ Eigen::VectorXd Homography2DVisualServo::computeFeedback(Eigen::Matrix3d& G, Eig
     Eigen::Matrix3d H = _K.inverse()*G*_K;
     Eigen::Vector3d m_star = _K.inverse()*p_star;
 
-    Eigen::VectorXd e(6);
-    e << _computeEv(H, m_star), _computeEw(H);
+    Eigen::VectorXd dtwist(6);
+    dtwist << _lambda_v.asDiagonal()*(H, m_star), _lambda_w.asDiagonal()*_computeEw(H);
 
-    return e;
+    return dtwist;
 }
+
+
+// eq. 15 and 16, see paper
+Eigen::VectorXd Homography2DVisualServo::computeFeedback(Eigen::Matrix3d& G) {
+
+    Eigen::Vector3d p_star(_K(0,2), _K(1,2), 1.);  // principal point per default
+
+    Eigen::Matrix3d H = _K.inverse()*G*_K;
+    Eigen::Vector3d m_star = _K.inverse()*p_star;
+
+    Eigen::VectorXd dtwist(6);
+    dtwist << _lambda_v.asDiagonal()*(H, m_star), _lambda_w.asDiagonal()*_computeEw(H);
+
+    return dtwist;
+}
+
 
 
 // eq. 15, see paper
