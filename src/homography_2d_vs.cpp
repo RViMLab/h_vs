@@ -27,7 +27,7 @@ Eigen::VectorXd Homography2DVisualServo::computeFeedback(Eigen::Matrix3d& G) {
     Eigen::Vector3d m_star = _K.inverse()*p_star;
 
     Eigen::VectorXd dtwist(6);
-    dtwist << _lambda_v.asDiagonal()*(H, m_star), _lambda_w.asDiagonal()*_computeEw(H);
+    dtwist << _lambda_v.asDiagonal()*_computeEv(H, m_star), _lambda_w.asDiagonal()*_computeEw(H);
 
     return dtwist;
 }
