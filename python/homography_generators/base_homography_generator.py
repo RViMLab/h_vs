@@ -15,9 +15,9 @@ class BaseHomographyGenerator(ABC):
         """
         if self._ud:
             img = self._undistort(img)
-        if len(self.imgs) >= self.buffer_size:
-            self.imgs.pop(0)
-        self.imgs.append(img)
+        if len(self._imgs) >= self._buffer_size:
+            self._imgs.pop(0)
+        self._imgs.append(img)
 
     def clearBuffer(self):
         """Clear image buffer.
