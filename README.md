@@ -4,7 +4,7 @@ Implementation of [Homography-based 2D Visual Servoing](https://ieeexplore.ieee.
 ## Overview
 This package runs two nodes
 
-  - [h_gen_node](python/h_gen_node.py), subscribes `camera/image_raw` and has a child of [BaseHomographyGenerator](python/homography_generators/base_homohraphy_generator.py) to compute and publish projective homography `G` to `visual_servo/G`
+  - [h_gen_node](python/h_gen_node.py), subscribes `camera/image_raw` and has a child of [BaseHomographyGenerator](python/homography_generators/base_homography_generator.py) to compute and publish projective homography `G` to `visual_servo/G`
   - [h_vs_node](src/h_vs_node.cpp), subscribes to `visual_servo/G` and has a [Homography2DVisualServo](include/h_vs/homography_2d_vs.h) to compute and publish angular and linear camera frame velocity to `visual_servo/dtwist`
 
 Overview shown below
