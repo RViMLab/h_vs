@@ -35,7 +35,7 @@ void GCb(const std_msgs::Float64MultiArrayConstPtr G_msg) {
 
 int main(int argc, char** argv) {
 
-    ros::init(argc, argv, "visual_servo");
+    ros::init(argc, argv, "h_vs_node");
     auto nh = ros::NodeHandle();
 
     // Read parameters
@@ -62,4 +62,9 @@ int main(int argc, char** argv) {
     dtwist_pub = nh.advertise<geometry_msgs::Twist>("visual_servo/dtwist", 1);
 
     ros::spin();
+
+    G_sub.shutdown();
+    dtwist_pub.shutdown();
+
+    return 0;
 };
