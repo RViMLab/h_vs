@@ -44,6 +44,7 @@ install(
     RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-catkin_install_python(PROGRAMS python/h_gen_node.py
+catkin_install_python(
+  PROGRAMS python/h_gen_node.py python/h_gen_calibration_pattern_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
