@@ -6,6 +6,8 @@ import torch
 import numpy as np
 from std_msgs.msg import Float64MultiArray, MultiArrayLayout, MultiArrayDimension
 from rospy.numpy_msg import numpy_msg
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
 import homography_generators.calibration_pattern_homography_generator as cphg
 
@@ -17,27 +19,55 @@ import homography_generators.calibration_pattern_homography_generator as cphg
 
 # TODO: https://gitter.im/RoboStack/Lobby, try to add a conda env once more ros packages integrated
 
+# img = np.array([])
+# img0 = np.array([])
+
+
+class ImageHandler():
+    def __init__(self, img0, img):
+        self.img0 = img0
+        self.img = img
+
+        self.cv_bridge = CvBridge()
+
+        self.img0_sub = rospy.Subscriber('visual_servo/img0', Image, self.img0_cb)
+        self.img_sub = rospy.Subscriber('endoscope_camera/image_raw', Image, self.img_cb)
+
+    def img0_cb(self, msg):
+        self.img0 = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+
+    def img_cb(self, msg):
+        self.img = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+
+
 if __name__ == '__main__':
-    print('hello world!')
 
-    # ones = torch.ones(2).cuda()
+    rospy.init_node('h_gen')
 
-    # print(ones)
+    K = np.array(rospy.get_param('camera_matrix/data')).reshape([
+        rospy.get_param('camera_matrix/rows'),
+        rospy.get_param('camera_matrix/cols')
+    ])
 
-    # hg = cphg.CalibrationPatternHomographyGenerator(1, np.array([1.]), 10.)
-    # print(hg._K)
+    d = np.array(rospy.get_param('distortion_coefficients/data'))
+    
+    hg = cphg.CalibrationPatternHomographyGenerator(K=K, d=d)
 
-    rospy.init_node("test")
+    shape = [rospy.get_param('image_height'), rospy.get_param('image_width'), 3]
+    img0 = np.zeros(shape)
+    img = np.zeros(shape)
+
+    ih = ImageHandler(img0, img)
+
     pub = rospy.Publisher("visual_servo/G", numpy_msg(Float64MultiArray), queue_size=1)
 
     while not rospy.is_shutdown():
-        
-        G = np.array([
-            [1., 1., 0.],
-            [0., 1., 0.],
-            [0., 0., 1.]
-        ], np.float64)
+        cv2.imshow('img0', ih.img0)
+        cv2.imshow('img', ih.img)
+        cv2.waitKey(1)
 
+        hg.addImg(ih.img)
+        G = hg.desiredHomography(ih.img0)
 
         layout = MultiArrayLayout(
             dim=[
@@ -47,8 +77,6 @@ if __name__ == '__main__':
             data_offset=0
         )
 
-
         msg = Float64MultiArray(layout=layout, data=G.flatten().tolist())
 
         pub.publish(msg)
-        rospy.sleep(1.)
