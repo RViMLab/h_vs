@@ -54,8 +54,17 @@ if __name__ == '__main__':
 
     while not rospy.is_shutdown():
         # Show initial and desired images
-        cv2.imshow('img0', ih.img0)
-        cv2.imshow('img', ih.img)
+        cv2.namedWindow('Initial Image')
+        cv2.namedWindow('Current Image')
+        cv2.namedWindow('Error Image')
+
+        cv2.moveWindow('Initial Image', 560, 100)
+        cv2.moveWindow('Current Image', 950, 100)
+        cv2.moveWindow('Error Image', 1335, 100)
+
+        cv2.imshow('Initial Image', ih.img0)
+        cv2.imshow('Current Image', ih.img)
+        cv2.imshow('Error Image', ih.img0 - ih.img)
         cv2.waitKey(1)
 
         # Update with current image and compute desired projective homography
