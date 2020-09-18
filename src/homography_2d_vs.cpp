@@ -11,10 +11,10 @@ Eigen::VectorXd Homography2DVisualServo::computeFeedback(Eigen::Matrix3d& G, Eig
     Eigen::Matrix3d H = _K.inverse()*G*_K;
     Eigen::Vector3d m_star = _K.inverse()*p_star;
 
-    Eigen::VectorXd dtwist(6);
-    dtwist << _lambda_v.asDiagonal()*_computeEv(H, m_star), _lambda_w.asDiagonal()*_computeEw(H);
+    Eigen::VectorXd twist(6);
+    twist << _lambda_v.asDiagonal()*_computeEv(H, m_star), _lambda_w.asDiagonal()*_computeEw(H);
 
-    return dtwist;
+    return twist;
 }
 
 
@@ -26,10 +26,10 @@ Eigen::VectorXd Homography2DVisualServo::computeFeedback(Eigen::Matrix3d& G) {
     Eigen::Matrix3d H = _K.inverse()*G*_K;
     Eigen::Vector3d m_star = _K.inverse()*p_star;
 
-    Eigen::VectorXd dtwist(6);
-    dtwist << _lambda_v.asDiagonal()*_computeEv(H, m_star), _lambda_w.asDiagonal()*_computeEw(H);
+    Eigen::VectorXd twist(6);
+    twist << _lambda_v.asDiagonal()*_computeEv(H, m_star), _lambda_w.asDiagonal()*_computeEw(H);
 
-    return dtwist;
+    return twist;
 }
 
 

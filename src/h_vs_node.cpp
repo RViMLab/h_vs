@@ -13,7 +13,7 @@
 Homography2DVisualServo hvs;
 
 ros::Subscriber G_sub;
-ros::Publisher dtwist_pub;
+ros::Publisher twist_pub;
 
 
 // Projective homography callback
@@ -23,13 +23,13 @@ void GCb(const std_msgs::Float64MultiArrayConstPtr G_msg) {
     Eigen::Matrix3d G = Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>>(G_msg->data.data());
 
     // Compute feedback
-    auto dtwist = hvs.computeFeedback(G);  // defaults to p_star = principal point
+    auto twist = hvs.computeFeedback(G);  // defaults to p_star = principal point
 
     // Publish linear and angular velocity as twist
-    geometry_msgs::Twist dtwist_msg;
-    tf::twistEigenToMsg(dtwist, dtwist_msg);
+    geometry_msgs::Twist twist_msg;
+    tf::twistEigenToMsg(twist, twist_msg);
 
-    dtwist_pub.publish(dtwist_msg);
+    twist_pub.publish(twist_msg);
 };
 
 
@@ -59,12 +59,12 @@ int main(int argc, char** argv) {
 
     // Subscribe to projective homography and publish desired linear and angular velocity
     G_sub = nh.subscribe<std_msgs::Float64MultiArray>("visual_servo/G", 1, GCb);
-    dtwist_pub = nh.advertise<geometry_msgs::Twist>("visual_servo/dtwist", 1);
+    twist_pub = nh.advertise<geometry_msgs::Twist>("visual_servo/twist", 1);
 
     ros::spin();
 
     G_sub.shutdown();
-    dtwist_pub.shutdown();
+    twist_pub.shutdown();
 
     return 0;
 };
