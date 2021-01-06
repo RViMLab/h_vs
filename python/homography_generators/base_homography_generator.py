@@ -45,6 +45,16 @@ class BaseHomographyGenerator(ABC):
         return cv2.undistort(img, self._K, self._D, None, newcameramtx)
 
     @property
+    def Imgs(self):
+        """Image buffer.
+        """
+        return self._imgs
+
+    @Imgs.deleter
+    def Imgs(self):
+        self.clearBuffer()
+
+    @property
     def K(self):
         """Camera intrinsics.
         """

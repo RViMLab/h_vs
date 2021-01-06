@@ -23,10 +23,10 @@ class ImageHandler():
 
 
     def _img0_cb(self, msg):
-        self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+        self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
 
     def _img_cb(self, msg):
-        self._img = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+        self._img = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
 
     @property
     def Img0(self):
@@ -67,21 +67,17 @@ if __name__ == '__main__':
     while not rospy.is_shutdown():
         # Show initial and desired images
         cv2.namedWindow('Initial Image')
-        cv2.namedWindow('Current Image')
+        cv2.namedWindow('Current Undistorted Image')
         cv2.namedWindow('Error Image')
-
-        cv2.moveWindow('Initial Image', 560, 100)
-        cv2.moveWindow('Current Image', 950, 100)
-        cv2.moveWindow('Error Image', 1335, 100)
-
-        cv2.imshow('Initial Image', ih.Img0)
-        cv2.imshow('Current Image', ih.Img)
-        cv2.imshow('Error Image', ih.Img0 - ih.Img)
-        cv2.waitKey(1)
 
         # Update with current image and compute desired projective homography
         hg.addImg(ih.Img)
         G = hg.desiredHomography(ih.Img0)
+
+        cv2.imshow('Initial Image', ih.Img0)
+        cv2.imshow('Current Undistorted Image', hg.Imgs[0])  # undistorted
+        cv2.imshow('Error Image', ih.Img0 - ih.Img)
+        cv2.waitKey(1)
 
         # Publish projective homography
         layout = MultiArrayLayout(
