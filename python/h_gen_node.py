@@ -8,6 +8,7 @@ from std_msgs.msg import Float64MultiArray, MultiArrayLayout, MultiArrayDimensio
 from rospy.numpy_msg import numpy_msg
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+import camera_info_manager
 
 import homography_generators.calibration_pattern_homography_generator as cphg
 
@@ -28,25 +29,16 @@ class ImageHandler():
         self._img0 = img0
         self._img = img
 
-        self._K = np.eye(3)
-        self._D = np.zeros([5])
-
         self.cv_bridge = CvBridge()
 
         self._img0_sub = rospy.Subscriber('visual_servo/img0', Image, self.img0_cb)
         self._img_sub = rospy.Subscriber('endoscope_camera/image_raw', Image, self.img_cb)
-
-        self._camera_info_sub = rospy.Subscriber('camera/camera_info', CameraInfo, self._camera_info_cb)
 
     def _img0_cb(self, msg):
         self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
 
     def _img_cb(self, msg):
         self._img = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
-
-    def _camera_info_cb(self, msg):
-        self._K = msg.K
-        self._D = msg.D
 
     @property
     def Img0(self):
@@ -56,21 +48,20 @@ class ImageHandler():
     def Img(self):
         return self._img
 
-    @property
-    def K(self):
-        return self._K
-
-    @property
-    def D(self):
-        return self._D
-
 
 if __name__ == '__main__':
 
     rospy.init_node('h_gen')
     
+    cname = rospy.get_param("h_gen/cname")
+    url = rospy.get_param("h_gen/url")
+
+    camera_info = camera_info_manager.CameraInfoManager(cname, url)
+    K = camera_info.getCameraInfo().K.reshape([3,3])
+    D = camera_info.getCameraInfo().D
+
     # Initialize homography generator with intrinsics
-    hg = cphg.CalibrationPatternHomographyGenerator()
+    hg = cphg.CalibrationPatternHomographyGenerator(K=K, D=D)
 
     shape = [rospy.get_param('image_height'), rospy.get_param('image_width'), 3]
     img0 = np.zeros(shape)
@@ -85,8 +76,6 @@ if __name__ == '__main__':
         cv2.imshow('img', ih.img)
         cv2.waitKey(1)
 
-        hg.K = ih.K
-        hg.D = ih.D
         hg.addImg(ih.Img)
         G = hg.desiredHomography(ih.Img0)
 

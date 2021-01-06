@@ -6,6 +6,7 @@ find_package(catkin REQUIRED COMPONENTS
     roscpp
     camera_info_manager
     rospy
+    camera_info_manager_py
     std_msgs
     geometry_msgs
     eigen_conversions
@@ -15,7 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(Eigen3 REQUIRED)
 
 catkin_package(
-    CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs eigen_conversions
+    CATKIN_DEPENDS roscpp camera_info_manager rospy camera_info_manager_py std_msgs geometry_msgs eigen_conversions
     INCLUDE_DIRS include ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS}
     DEPENDS EIGEN3
 )

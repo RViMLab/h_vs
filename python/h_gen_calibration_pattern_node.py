@@ -3,6 +3,7 @@
 import rospy
 import cv2
 import numpy as np
+import camera_info_manager
 from std_msgs.msg import Float64MultiArray, MultiArrayLayout, MultiArrayDimension
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
@@ -15,25 +16,17 @@ class ImageHandler():
         self._img0 = img0
         self._img = img
 
-        self._K = np.eye(3)
-        self._D = np.zeros([5])
-
         self.cv_bridge = CvBridge()
 
         self._img0_sub = rospy.Subscriber('visual_servo/img0', Image, self._img0_cb)
         self._img_sub = rospy.Subscriber('camera/image_raw', Image, self._img_cb)
 
-        self._camera_info_sub = rospy.Subscriber('camera/camera_info', CameraInfo, self._camera_info_cb)
 
     def _img0_cb(self, msg):
         self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
 
     def _img_cb(self, msg):
         self._img = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
-
-    def _camera_info_cb(self, msg):
-        self._K = msg.K
-        self._D = msg.D
 
     @property
     def Img0(self):
@@ -43,21 +36,20 @@ class ImageHandler():
     def Img(self):
         return self._img
 
-    @property
-    def K(self):
-        return self._K
-
-    @property
-    def D(self):
-        return self._D
-
 
 if __name__ == '__main__':
 
     rospy.init_node('h_gen_calibration_pattern_node')
 
+    cname = rospy.get_param("h_gen_calibration_pattern_node/cname")
+    url = rospy.get_param("h_gen_calibration_pattern_node/url")
+
+    camera_info = camera_info_manager.CameraInfoManager(cname, url)
+    K = camera_info.getCameraInfo().K.reshape([3,3])
+    D = camera_info.getCameraInfo().D
+
     # Initialize homography generator
-    hg = cphg.CalibrationPatternHomographyGenerator(undistort=True)
+    hg = cphg.CalibrationPatternHomographyGenerator(K=K, D=D, undistort=True)
 
     # Handle initial and current images
     shape = [rospy.get_param('image_height'), rospy.get_param('image_width'), 3]
@@ -85,8 +77,6 @@ if __name__ == '__main__':
         cv2.waitKey(1)
 
         # Update with current image and compute desired projective homography
-        hg.K = ih.K 
-        hg.D = ih.D
         hg.addImg(ih.Img)
         G = hg.desiredHomography(ih.Img0)
 

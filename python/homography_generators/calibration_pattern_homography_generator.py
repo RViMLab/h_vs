@@ -4,8 +4,8 @@ import cv2
 from homography_generators.base_homography_generator import BaseHomographyGenerator
 
 class CalibrationPatternHomographyGenerator(BaseHomographyGenerator):
-    def __init__(self, undistort: bool=False):
-        super().__init__(buffer_size=1, undistort=undistort)
+    def __init__(self, K: np.array, D: np.array, undistort: bool=False):
+        super().__init__(K, D, buffer_size=1, undistort=undistort)
 
     def desiredHomography(self, img0, patternSize=(4, 11)):
 
