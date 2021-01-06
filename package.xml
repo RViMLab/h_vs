@@ -9,6 +9,7 @@
 
   <buildtool_depend>catkin</buildtool_depend>
   <depend>roscpp</depend>
+  <depend>camera_info_manager</depend>
   <depend>rospy</depend>
   <depend>eigen</depend>
   <depend>std_msgs</depend>

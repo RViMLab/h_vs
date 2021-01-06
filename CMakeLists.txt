@@ -4,6 +4,7 @@ project(h_vs)
 # Catkin packages
 find_package(catkin REQUIRED COMPONENTS
     roscpp
+    camera_info_manager
     rospy
     std_msgs
     geometry_msgs
