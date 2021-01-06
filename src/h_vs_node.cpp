@@ -2,6 +2,7 @@
 #include <Eigen/Core>
 
 #include <ros/ros.h>
+#include <camera_info_manager/camera_info_manager.h>
 #include <std_msgs/Float64MultiArray.h>
 #include <geometry_msgs/Twist.h>
 #include <eigen_conversions/eigen_msg.h>
@@ -39,11 +40,16 @@ int main(int argc, char** argv) {
     auto nh = ros::NodeHandle();
 
     // Read parameters
-    std::vector<double> std_lambda_v, std_lambda_w, camera_matrix;
+    std::string cname, url;
+    std::vector<double> std_lambda_v, std_lambda_w;
 
+    nh.getParam("h_vs_node/cname", cname);
+    nh.getParam("h_vs_node/url", url);
     nh.getParam("lambda_v", std_lambda_v);
     nh.getParam("lambda_w", std_lambda_w);
-    nh.getParam("camera_matrix/data", camera_matrix);
+
+    camera_info_manager::CameraInfoManager camera_info(nh, cname, url);
+    auto camera_matrix = camera_info.getCameraInfo().K;
 
     // Map parameters to eigen types
     Eigen::Vector3d lambda_v = Eigen::Vector3d::Map(std_lambda_v.data());

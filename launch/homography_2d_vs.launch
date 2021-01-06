@@ -1,7 +1,9 @@
 <launch>
-    <rosparam command="load" file="$(find h_vs)/config/cam_params.yml"/>
     <rosparam command="load" file="$(find h_vs)/config/gain_params.yml"/>
 
-    <node pkg="h_vs" name="h_gen_node" type="h_gen_node.py" output="screen"/>
-    <node pkg="h_vs" name="h_vs_node" type="h_vs_node" output="screen"/>
+    <node pkg="h_vs" name="h_gen_node" type="h_gen_node.py" output="screen"/>  <!-- expects camera parameters from a CameraInfo topic under camera/camera_info -->
+    <node pkg="h_vs" name="h_vs_node" type="h_vs_node" output="screen">
+        <param name="cname" type="str" value="narrow_stereo"/>
+        <param name="url" type="str" value="package://h_vs/config/cam_params.yml"/>
+    </node>
 </launch>

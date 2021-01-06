@@ -25,33 +25,52 @@ import homography_generators.calibration_pattern_homography_generator as cphg
 
 class ImageHandler():
     def __init__(self, img0, img):
-        self.img0 = img0
-        self.img = img
+        self._img0 = img0
+        self._img = img
+
+        self._K = np.eye(3)
+        self._D = np.zeros([5])
 
         self.cv_bridge = CvBridge()
 
-        self.img0_sub = rospy.Subscriber('visual_servo/img0', Image, self.img0_cb)
-        self.img_sub = rospy.Subscriber('endoscope_camera/image_raw', Image, self.img_cb)
+        self._img0_sub = rospy.Subscriber('visual_servo/img0', Image, self.img0_cb)
+        self._img_sub = rospy.Subscriber('endoscope_camera/image_raw', Image, self.img_cb)
 
-    def img0_cb(self, msg):
-        self.img0 = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+        self._camera_info_sub = rospy.Subscriber('camera/camera_info', CameraInfo, self._camera_info_cb)
 
-    def img_cb(self, msg):
-        self.img = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+    def _img0_cb(self, msg):
+        self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+
+    def _img_cb(self, msg):
+        self._img = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+
+    def _camera_info_cb(self, msg):
+        self._K = msg.K
+        self._D = msg.D
+
+    @property
+    def Img0(self):
+        return self._img0
+
+    @property
+    def Img(self):
+        return self._img
+
+    @property
+    def K(self):
+        return self._K
+
+    @property
+    def D(self):
+        return self._D
 
 
 if __name__ == '__main__':
 
     rospy.init_node('h_gen')
-
-    K = np.array(rospy.get_param('camera_matrix/data')).reshape([
-        rospy.get_param('camera_matrix/rows'),
-        rospy.get_param('camera_matrix/cols')
-    ])
-
-    d = np.array(rospy.get_param('distortion_coefficients/data'))
     
-    hg = cphg.CalibrationPatternHomographyGenerator(K=K, d=d)
+    # Initialize homography generator with intrinsics
+    hg = cphg.CalibrationPatternHomographyGenerator()
 
     shape = [rospy.get_param('image_height'), rospy.get_param('image_width'), 3]
     img0 = np.zeros(shape)
@@ -66,8 +85,10 @@ if __name__ == '__main__':
         cv2.imshow('img', ih.img)
         cv2.waitKey(1)
 
-        hg.addImg(ih.img)
-        G = hg.desiredHomography(ih.img0)
+        hg.K = ih.K
+        hg.D = ih.D
+        hg.addImg(ih.Img)
+        G = hg.desiredHomography(ih.Img0)
 
         layout = MultiArrayLayout(
             dim=[
