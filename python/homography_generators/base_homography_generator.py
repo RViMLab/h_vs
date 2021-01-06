@@ -1,4 +1,5 @@
 import numpy as np
+import cv2
 from abc import ABC, abstractmethod
 
 class BaseHomographyGenerator(ABC):
@@ -39,9 +40,9 @@ class BaseHomographyGenerator(ABC):
         returns: img, undistorted image
         """
         h, w = img.shape[:2]
-        newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dst, (w,h), 1, (w,h))
+        newcameramtx, roi = cv2.getOptimalNewCameraMatrix(self._K, self._D, (w,h), 1, (w,h))
 
-        return cv2.undistort(img, mtx, dst, None, newcameramtx)
+        return cv2.undistort(img, self._K, self._D, None, newcameramtx)
 
     @property
     def K(self):
