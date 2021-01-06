@@ -2,7 +2,7 @@
 
 import rospy
 import cv2
-import torch
+# import torch
 import numpy as np
 from std_msgs.msg import Float64MultiArray, MultiArrayLayout, MultiArrayDimension
 from rospy.numpy_msg import numpy_msg
@@ -31,8 +31,8 @@ class ImageHandler():
 
         self.cv_bridge = CvBridge()
 
-        self._img0_sub = rospy.Subscriber('visual_servo/img0', Image, self.img0_cb)
-        self._img_sub = rospy.Subscriber('endoscope_camera/image_raw', Image, self.img_cb)
+        self._img0_sub = rospy.Subscriber('visual_servo/img0', Image, self._img0_cb)
+        self._img_sub = rospy.Subscriber('endoscope_camera/image_raw', Image, self._img_cb)
 
     def _img0_cb(self, msg):
         self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
@@ -51,19 +51,22 @@ class ImageHandler():
 
 if __name__ == '__main__':
 
-    rospy.init_node('h_gen')
+    rospy.init_node('h_gen_node')
     
-    cname = rospy.get_param("h_gen/cname")
-    url = rospy.get_param("h_gen/url")
+    cname = rospy.get_param("h_gen_node/cname")
+    url = rospy.get_param("h_gen_node/url")
 
-    camera_info = camera_info_manager.CameraInfoManager(cname, url)
-    K = camera_info.getCameraInfo().K.reshape([3,3])
-    D = camera_info.getCameraInfo().D
+    camera_info_manager = camera_info_manager.CameraInfoManager(cname, url)
+    camera_info_manager.loadCameraInfo()  # explicitely load info
+    camera_info = camera_info_manager.getCameraInfo()
+
+    K = np.asarray(camera_info.K).reshape([3,3])
+    D = np.asarray(camera_info.D)
 
     # Initialize homography generator with intrinsics
     hg = cphg.CalibrationPatternHomographyGenerator(K=K, D=D)
 
-    shape = [rospy.get_param('image_height'), rospy.get_param('image_width'), 3]
+    shape = [camera_info.height, camera_info.width, 3]
     img0 = np.zeros(shape)
     img = np.zeros(shape)
 
@@ -72,8 +75,8 @@ if __name__ == '__main__':
     pub = rospy.Publisher("visual_servo/G", numpy_msg(Float64MultiArray), queue_size=1)
 
     while not rospy.is_shutdown():
-        cv2.imshow('img0', ih.img0)
-        cv2.imshow('img', ih.img)
+        cv2.imshow('img0', ih.Img0)
+        cv2.imshow('img', ih.Img)
         cv2.waitKey(1)
 
         hg.addImg(ih.Img)

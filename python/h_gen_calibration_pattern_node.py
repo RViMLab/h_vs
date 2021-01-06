@@ -44,15 +44,18 @@ if __name__ == '__main__':
     cname = rospy.get_param("h_gen_calibration_pattern_node/cname")
     url = rospy.get_param("h_gen_calibration_pattern_node/url")
 
-    camera_info = camera_info_manager.CameraInfoManager(cname, url)
-    K = camera_info.getCameraInfo().K.reshape([3,3])
-    D = camera_info.getCameraInfo().D
+    camera_info_manager = camera_info_manager.CameraInfoManager(cname, url)
+    camera_info_manager.loadCameraInfo()  # explicitely load info
+    camera_info = camera_info_manager.getCameraInfo()
+
+    K = np.asarray(camera_info.K).reshape([3,3])
+    D = np.asarray(camera_info.D)
 
     # Initialize homography generator
     hg = cphg.CalibrationPatternHomographyGenerator(K=K, D=D, undistort=True)
 
     # Handle initial and current images
-    shape = [rospy.get_param('image_height'), rospy.get_param('image_width'), 3]
+    shape = [camera_info.height, camera_info.width, 3]
     img0 = np.zeros(shape)
     img = np.zeros(shape)
 
@@ -71,9 +74,9 @@ if __name__ == '__main__':
         cv2.moveWindow('Current Image', 950, 100)
         cv2.moveWindow('Error Image', 1335, 100)
 
-        cv2.imshow('Initial Image', ih.img0)
-        cv2.imshow('Current Image', ih.img)
-        cv2.imshow('Error Image', ih.img0 - ih.img)
+        cv2.imshow('Initial Image', ih.Img0)
+        cv2.imshow('Current Image', ih.Img)
+        cv2.imshow('Error Image', ih.Img0 - ih.Img)
         cv2.waitKey(1)
 
         # Update with current image and compute desired projective homography
