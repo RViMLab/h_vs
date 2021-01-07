@@ -4,7 +4,7 @@ import rospy
 import cv2
 import numpy as np
 import camera_info_manager
-from std_msgs.msg import Float64MultiArray, MultiArrayLayout, MultiArrayDimension
+from std_msgs.msg import Float64, Float64MultiArray, MultiArrayLayout, MultiArrayDimension
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
 
@@ -61,8 +61,9 @@ if __name__ == '__main__':
 
     ih = ImageHandler(img0, img)
 
-    # Publish desired projective homography
-    pub = rospy.Publisher("visual_servo/G", Float64MultiArray, queue_size=1)
+    # Publish desired projective homography and visual error
+    homography_pub = rospy.Publisher("visual_servo/G", Float64MultiArray, queue_size=1)
+    error_pub = rospy.Publisher("visual_servo/mean_pairwise_distance", Float64, queue_size=1)
 
     while not rospy.is_shutdown():
         # Show initial and desired images
@@ -72,7 +73,7 @@ if __name__ == '__main__':
 
         # Update with current image and compute desired projective homography
         hg.addImg(ih.Img)
-        G = hg.desiredHomography(ih.Img0)
+        G, mean_pairwise_distance = hg.desiredHomography(ih.Img0)
 
         cv2.imshow('Initial Image', ih.Img0)
         cv2.imshow('Current Undistorted Image', hg.Imgs[0])  # undistorted
@@ -88,4 +89,6 @@ if __name__ == '__main__':
             data_offset=0
         )
         msg = Float64MultiArray(layout=layout, data=G.flatten().tolist())
-        pub.publish(msg)
+        homography_pub.publish(msg)
+        if mean_pairwise_distance:
+            error_pub.publish(mean_pairwise_distance)

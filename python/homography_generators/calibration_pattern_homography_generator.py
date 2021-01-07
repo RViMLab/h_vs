@@ -21,7 +21,24 @@ class CalibrationPatternHomographyGenerator(BaseHomographyGenerator):
 
         # compute homography
         G = np.eye(3)
+        mean_pairwise_distance = None
         if found0 and found:
             G, _ = cv2.findHomography(pts0, pts, cv2.RANSAC)
 
-        return G
+            # evaluate in normalized image coordinates
+            # K^(-1)*[(pts,1) - (pts0,1)]
+            K_inv = np.linalg.inv(self._K)
+
+            pts  = np.concatenate([pts, np.ones((pts.shape[0], pts.shape[1], 1))], axis=2)
+            pts0 = np.concatenate([pts0, np.ones((pts0.shape[0], pts0.shape[1], 1))], axis=2)
+
+            # Nx1x3 -> Nx3x1
+            pts  = pts.transpose(0, 2, 1)
+            pts0 = pts0.transpose(0, 2, 1)
+
+            pts  = np.matmul(K_inv, pts)
+            pts0 = np.matmul(K_inv, pts0)
+
+            mean_pairwise_distance = np.linalg.norm(pts[:,:-1] - pts0[:,:-1], axis=1).mean()
+
+        return G, mean_pairwise_distance
