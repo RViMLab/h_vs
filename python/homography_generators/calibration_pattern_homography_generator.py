@@ -22,6 +22,7 @@ class CalibrationPatternHomographyGenerator(BaseHomographyGenerator):
         # compute homography
         G = np.eye(3)
         mean_pairwise_distance = None
+
         if found0 and found:
             G, _ = cv2.findHomography(pts0, pts, cv2.RANSAC)
 
