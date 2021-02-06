@@ -12,7 +12,7 @@ class BaseHomographyGenerator(ABC):
         self._D = D
 
     def addImg(self, img: np.array):
-        """Append image buffer by img and undistort if desired.
+        r"""Append image buffer by img and undistort if desired.
         """
         if self._ud:
             img = self._undistort(img)
@@ -21,20 +21,20 @@ class BaseHomographyGenerator(ABC):
         self._imgs.append(img)
 
     def clearBuffer(self):
-        """Clear image buffer.
+        r"""Clear image buffer.
         """
         self._imgs.clear()
 
     @abstractmethod
     def desiredHomography(self) -> np.array:
-        """Compute desired homography based on image buffer.
+        r"""Compute desired homography based on image buffer.
 
         returns: G, projective homography (np.array)
         """
         return
 
     def _undistort(self, img: np.array):
-        """Undistord img.
+        r"""Undistord img.
         param: img, image in OpenCV convention of size HxWxC
 
         returns: img, undistorted image
@@ -46,7 +46,7 @@ class BaseHomographyGenerator(ABC):
 
     @property
     def Imgs(self):
-        """Image buffer.
+        r"""Image buffer.
         """
         return self._imgs
 
@@ -56,7 +56,7 @@ class BaseHomographyGenerator(ABC):
 
     @property
     def K(self):
-        """Camera intrinsics.
+        r"""Camera intrinsics.
         """
         return self._K
 
@@ -66,7 +66,7 @@ class BaseHomographyGenerator(ABC):
 
     @property
     def D(self):
-        """Camera distortion.
+        r"""Camera distortion.
         """
         return self._D
 

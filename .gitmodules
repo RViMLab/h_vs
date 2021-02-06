@@ -1,0 +1,3 @@
+[submodule "python/homography_generators/endoscopy"]
+	path = python/homography_generators/endoscopy
+	url = https://github.com/RViMLab/endoscopy.git
