@@ -3,7 +3,7 @@ import cv2
 from abc import ABC, abstractmethod
 
 class BaseHomographyGenerator(ABC):
-    def __init__(self, K: np.array, D: np.array, buffer_size: int, undistort: bool=False):
+    def __init__(self, K: np.ndarray, D: np.ndarray, buffer_size: int, undistort: bool=False):
         self._imgs = []
         self._buffer_size = buffer_size
         self._ud = undistort
@@ -11,7 +11,7 @@ class BaseHomographyGenerator(ABC):
         self._K = K
         self._D = D
 
-    def addImg(self, img: np.array):
+    def addImg(self, img: np.ndarray):
         r"""Append image buffer by img and undistort if desired.
         """
         if self._ud:
@@ -26,14 +26,14 @@ class BaseHomographyGenerator(ABC):
         self._imgs.clear()
 
     @abstractmethod
-    def desiredHomography(self) -> np.array:
+    def desiredHomography(self) -> np.ndarray:
         r"""Compute desired homography based on image buffer.
 
-        returns: G, projective homography (np.array)
+        returns: G, projective homography (np.ndarray)
         """
         return
 
-    def _undistort(self, img: np.array):
+    def _undistort(self, img: np.ndarray):
         r"""Undistord img.
         param: img, image in OpenCV convention of size HxWxC
 
@@ -61,7 +61,7 @@ class BaseHomographyGenerator(ABC):
         return self._K
 
     @K.setter
-    def K(self, value: np.array):
+    def K(self, value: np.ndarray):
         self._K = value
 
     @property
@@ -71,5 +71,5 @@ class BaseHomographyGenerator(ABC):
         return self._D
 
     @D.setter
-    def D(self, value: np.array):
+    def D(self, value: np.ndarray):
         self._D = value
