@@ -1,9 +1,10 @@
 import numpy as np
 import cv2
+from typing import List
 from abc import ABC, abstractmethod
 
 class BaseHomographyGenerator(ABC):
-    def __init__(self, K: np.ndarray, D: np.ndarray, buffer_size: int, undistort: bool=False):
+    def __init__(self, K: np.ndarray, D: np.ndarray, buffer_size: int, undistort: bool=False) -> None:
         self._imgs = []
         self._buffer_size = buffer_size
         self._ud = undistort
@@ -11,7 +12,8 @@ class BaseHomographyGenerator(ABC):
         self._K = K
         self._D = D
 
-    def addImg(self, img: np.ndarray):
+    @abstractmethod
+    def addImg(self, img: np.ndarray) -> None:
         r"""Append image buffer by img and undistort if desired.
         """
         if self._ud:
@@ -33,7 +35,7 @@ class BaseHomographyGenerator(ABC):
         """
         return
 
-    def _undistort(self, img: np.ndarray):
+    def _undistort(self, img: np.ndarray) -> np.ndarray:
         r"""Undistord img.
         param: img, image in OpenCV convention of size HxWxC
 
@@ -45,31 +47,31 @@ class BaseHomographyGenerator(ABC):
         return cv2.undistort(img, self._K, self._D, None, newcameramtx)
 
     @property
-    def Imgs(self):
+    def Imgs(self) -> List[np.ndarray]:
         r"""Image buffer.
         """
         return self._imgs
 
     @Imgs.deleter
-    def Imgs(self):
+    def Imgs(self) -> None:
         self.clearBuffer()
 
     @property
-    def K(self):
+    def K(self) -> np.ndarray:
         r"""Camera intrinsics.
         """
         return self._K
 
     @K.setter
-    def K(self, value: np.ndarray):
+    def K(self, value: np.ndarray) -> None:
         self._K = value
 
     @property
-    def D(self):
+    def D(self) -> np.ndarray:
         r"""Camera distortion.
         """
         return self._D
 
     @D.setter
-    def D(self, value: np.ndarray):
+    def D(self, value: np.ndarray) -> None:
         self._D = value

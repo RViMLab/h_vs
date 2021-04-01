@@ -8,7 +8,7 @@ from std_msgs.msg import Float64, Float64MultiArray, MultiArrayLayout, MultiArra
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
 
-import homography_generators.calibration_pattern_homography_generator as cphg
+import homography_generators.calibration_pattern_homography_generator as ecphg
 
 
 class ImageHandler():
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     D = np.asarray(camera_info.D)
 
     # Initialize homography generator
-    hg = cphg.CalibrationPatternHomographyGenerator(K=K, D=D, undistort=True)
+    hg = ecphg.EndoscopyCalibrationPatternHomographyGenerator(K=K, D=D, undistort=True)
 
     # Handle initial and current images
     shape = [camera_info.height, camera_info.width, 3]

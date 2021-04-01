@@ -3,10 +3,28 @@ import cv2
 from typing import Tuple
 
 from homography_generators.base_homography_generator import BaseHomographyGenerator
+from endoscopy import maxRectangleInCircle, boundaryCircle, crop
 
-class CalibrationPatternHomographyGenerator(BaseHomographyGenerator):
-    def __init__(self, K: np.ndarray, D: np.ndarray, undistort: bool=False) -> None:
+
+class EndoscopyCalibrationPatternHomographyGenerator(BaseHomographyGenerator):
+    def __init__(self, K: np.ndarray, D: np.ndarray, undistort: bool=True) -> None:
         super().__init__(K, D, buffer_size=1, undistort=undistort)
+
+    def addImg(self, img: np.ndarray) -> None:
+        r"""Append image buffer by img and undistort if desired. Also
+        find boundary circle in endoscopic image and crop maximum sized
+        rectanlge of given aspect ratio.
+        """
+        if self._ud:
+            img = self._undistort(img)
+
+        center, radius = boundaryCircle(img)
+        top_left, shape = maxRectangleInCircle(img.shape, center, radius)
+        img = crop(img, top_left, shape)
+
+        if len(self._imgs) >= self._buffer_size:
+            self._imgs.pop(0)
+        self._imgs.append(img)
 
     def desiredHomography(self, img0, patternSize=(4, 11)) -> Tuple[np.ndarray, np.ndarray]:
 
