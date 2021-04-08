@@ -43,10 +43,10 @@ class ImageHandler():
 
 if __name__ == '__main__':
 
-    rospy.init_node('h_gen_calibration_pattern_node')
+    rospy.init_node('h_gen_endoscopy_calibration_pattern_node')
 
-    cname = rospy.get_param("h_gen_calibration_pattern_node/cname")
-    url = rospy.get_param("h_gen_calibration_pattern_node/url")
+    cname = rospy.get_param("h_gen_endoscopy_calibration_pattern_node/cname")
+    url = rospy.get_param("h_gen_endoscopy_calibration_pattern_node/url")
 
     camera_info_manager = camera_info_manager.CameraInfoManager(cname, url)
     camera_info_manager.loadCameraInfo()  # explicitely load info
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     D = np.asarray(camera_info.D)
 
     # Initialize homography generator
-    hg = cphg.CalibrationPatternHomographyGenerator(K=K, D=D, undistort=True)
+    hg = cphg.CalibrationPatternHomographyGenerator(K=K, D=D, undistort=False)  # undistort manually below
 
     # Handle initial and current images
     shape = [camera_info.height, camera_info.width, 3]
@@ -79,7 +79,20 @@ if __name__ == '__main__':
         cv2.namedWindow('Error Image')
 
         # Update with current image and compute desired projective homography
-        hg.addImg(ih.Img)
+        img = hg.undistort(ih.Img)
+        mask = endoscopy.bilateralSegmentation(img.astype(np.uint8), th=0.1)
+        center, radius = tracker.updateBoundaryCircle(mask)
+
+        if radius is None:
+            continue
+
+        inner_top_left, inner_shape = endoscopy.maxRectangleInCircle(mask.shape, center, radius)
+        inner_top_left, inner_shape = inner_top_left.astype(np.int), tuple(map(np.int, inner_shape))
+
+        img = endoscopy.crop(img, inner_top_left, inner_shape)
+        img = cv2.resize(img, (640, 480))
+        
+        hg.addImg(img)
         # G, mean_pairwise_distance = hg.desiredHomography(ih.Img0)
 
         cv2.imshow('Initial Image', ih.Img0)

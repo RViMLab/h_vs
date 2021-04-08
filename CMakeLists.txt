@@ -47,6 +47,6 @@ install(
 )
 
 catkin_install_python(
-  PROGRAMS python/h_gen_node.py python/h_gen_calibration_pattern_node.py
+  PROGRAMS python/h_gen_node.py python/h_gen_calibration_pattern_node.py python/h_gen_endoscopy_calibration_pattern_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
