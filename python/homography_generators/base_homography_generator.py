@@ -12,7 +12,6 @@ class BaseHomographyGenerator(ABC):
         self._K = K
         self._D = D
 
-    @abstractmethod
     def addImg(self, img: np.ndarray) -> None:
         r"""Append image buffer by img and undistort if desired.
         """
