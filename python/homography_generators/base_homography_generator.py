@@ -17,7 +17,7 @@ class BaseHomographyGenerator(ABC):
         r"""Append image buffer by img and undistort if desired.
         """
         if self._ud:
-            img = self._undistort(img)
+            img = self.undistort(img)
         if len(self._imgs) >= self._buffer_size:
             self._imgs.pop(0)
         self._imgs.append(img)
@@ -35,7 +35,8 @@ class BaseHomographyGenerator(ABC):
         """
         return
 
-    def _undistort(self, img: np.ndarray) -> np.ndarray:
+
+    def undistort(self, img: np.ndarray) -> np.ndarray:
         r"""Undistord img.
         param: img, image in OpenCV convention of size HxWxC
 
