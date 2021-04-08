@@ -8,7 +8,8 @@ from std_msgs.msg import Float64, Float64MultiArray, MultiArrayLayout, MultiArra
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
 
-import homography_generators.calibration_pattern_homography_generator as ecphg
+import homography_generators.calibration_pattern_homography_generator as cphg
+from homography_generators.endoscopy import endoscopy
 
 
 class ImageHandler():
@@ -21,9 +22,12 @@ class ImageHandler():
         self._img0_sub = rospy.Subscriber('visual_servo/img0', Image, self._img0_cb)
         self._img_sub = rospy.Subscriber('camera/image_raw', Image, self._img_cb)
 
-
     def _img0_cb(self, msg):
         self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+        mask = endoscopy.bilateralSegmentation(self._img0, 0.2)
+        center, radius = endoscopy.boundaryCircle(mask, 10)
+        top_left, shape = endoscopy.maxRectanlgeInCircle(mask.shape, center, radius)
+        self._img0 = endoscopy.crop(self._img0, top_left, shape)
 
     def _img_cb(self, msg):
         self._img = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
@@ -52,7 +56,7 @@ if __name__ == '__main__':
     D = np.asarray(camera_info.D)
 
     # Initialize homography generator
-    hg = ecphg.EndoscopyCalibrationPatternHomographyGenerator(K=K, D=D, undistort=True)
+    hg = cphg.CalibrationPatternHomographyGenerator(K=K, D=D, undistort=True)
 
     # Handle initial and current images
     shape = [camera_info.height, camera_info.width, 3]
@@ -60,6 +64,9 @@ if __name__ == '__main__':
     img = np.zeros(shape)
 
     ih = ImageHandler(img0, img)
+
+    # Crop endoscopic view
+    tracker = endoscopy.CoMBoundaryTracker()
 
     # Publish desired projective homography and visual error
     homography_pub = rospy.Publisher("visual_servo/G", Float64MultiArray, queue_size=1)
@@ -73,7 +80,7 @@ if __name__ == '__main__':
 
         # Update with current image and compute desired projective homography
         hg.addImg(ih.Img)
-        G, mean_pairwise_distance = hg.desiredHomography(ih.Img0)
+        # G, mean_pairwise_distance = hg.desiredHomography(ih.Img0)
 
         cv2.imshow('Initial Image', ih.Img0)
         cv2.imshow('Current Undistorted Image', hg.Imgs[0])  # undistorted
@@ -81,15 +88,15 @@ if __name__ == '__main__':
         # cv2.imshow('Error Image', cv2.warpPerspective(ih.Img0, G, (ih.Img.shape[1], ih.Img.shape[0])) - ih.Img)
         cv2.waitKey(1)
 
-        # Publish projective homography
-        layout = MultiArrayLayout(
-            dim=[
-                MultiArrayDimension(label='rows', size=G.shape[0]),
-                MultiArrayDimension(label='cols', size=G.shape[1])
-            ],
-            data_offset=0
-        )
-        msg = Float64MultiArray(layout=layout, data=G.flatten().tolist())
-        homography_pub.publish(msg)
-        if mean_pairwise_distance:
-            error_pub.publish(mean_pairwise_distance)
+        # # Publish projective homography
+        # layout = MultiArrayLayout(
+        #     dim=[
+        #         MultiArrayDimension(label='rows', size=G.shape[0]),
+        #         MultiArrayDimension(label='cols', size=G.shape[1])
+        #     ],
+        #     data_offset=0
+        # )
+        # msg = Float64MultiArray(layout=layout, data=G.flatten().tolist())
+        # homography_pub.publish(msg)
+        # if mean_pairwise_distance:
+        #     error_pub.publish(mean_pairwise_distance)
