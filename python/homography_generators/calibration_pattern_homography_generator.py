@@ -13,7 +13,7 @@ class CalibrationPatternHomographyGenerator(BaseHomographyGenerator):
         img = self._imgs[0]
 
         if self._ud:
-            img0 = self._undistort(img0)
+            img0 = self.undistort(img0)
 
         # convert to grayscale
         img0 = cv2.cvtColor(img0.astype(np.float32), cv2.COLOR_BGR2GRAY).astype(np.uint8)
