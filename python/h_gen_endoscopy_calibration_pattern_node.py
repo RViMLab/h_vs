@@ -13,9 +13,9 @@ from homography_generators.endoscopy import endoscopy
 
 
 class ImageHandler():
-    def __init__(self, img0, img):
-        self._img0 = img0
-        self._img = img
+    def __init__(self):
+        self._img0 = np.array([])
+        self._img = np.array([])
 
         self._img0_init = False
 
@@ -26,24 +26,9 @@ class ImageHandler():
 
     def _img0_cb(self, msg):
         if not self._img0_init: 
-            img = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+            self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+            self._img0_init = True
 
-            mask = endoscopy.bilateralSegmentation(img.astype(np.uint8), th=0.1)
-            center, radius = endoscopy.boundaryCircle(mask, th=10)
-
-            if radius is None:
-                return
-
-            illumination = endoscopy.illuminationLevel(mask, center, radius)
-
-            if illumination >= 0.98:
-                top_left, shape = endoscopy.maxRectangleInCircle(mask.shape, center, radius)
-                top_left, shape = top_left.astype(np.int), tuple(map(np.int, shape))
-
-                img = endoscopy.crop(img, top_left, shape)
-                img = cv2.resize(img, (640, 480))
-                self._img0 = img
-                self._img0_init = True
 
     def _img_cb(self, msg):
         self._img = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
@@ -76,13 +61,34 @@ if __name__ == '__main__':
 
     # Handle initial and current images
     shape = [camera_info.height, camera_info.width, 3]
-    img0 = np.zeros(shape)
-    img = np.zeros(shape)
 
-    ih = ImageHandler(img0, img)
+    ih = ImageHandler()
 
     # Crop endoscopic view
     tracker = endoscopy.CoMBoundaryTracker()
+
+    # Wait for initialization
+    initialized = False
+    while not initialized:
+        if ih.Img0.shape[0] == 0:
+            rospy.sleep(rospy.Duration(0.1))
+            continue
+
+        img0 = hg.undistort(ih.Img0)
+        mask = endoscopy.bilateralSegmentation(img0.astype(np.uint8), th=0.1)
+        center, radius = tracker.updateBoundaryCircle(mask)
+
+        if radius is None:
+            rospy.loginfo('h_gen_endoscopy_calibration_pattern_node: Endoscopic view not initialized.')
+            continue
+
+        inner_top_left, inner_shape = endoscopy.maxRectangleInCircle(mask.shape, center, radius)
+        inner_top_left, inner_shape = inner_top_left.astype(np.int), tuple(map(np.int, inner_shape))
+
+        img0 = endoscopy.crop(img0, inner_top_left, inner_shape)
+        img0 = cv2.resize(img0, (640, 480))
+
+        initialized = True
 
     # Publish desired projective homography and visual error
     homography_pub = rospy.Publisher("visual_servo/G", Float64MultiArray, queue_size=1)
@@ -99,25 +105,18 @@ if __name__ == '__main__':
         mask = endoscopy.bilateralSegmentation(img.astype(np.uint8), th=0.1)
         center, radius = tracker.updateBoundaryCircle(mask)
 
-        if radius is None:
-            rospy.loginfo('h_gen_endoscopy_calibration_pattern_node: Endoscopic view not initialized.')
-            continue
-
         inner_top_left, inner_shape = endoscopy.maxRectangleInCircle(mask.shape, center, radius)
         inner_top_left, inner_shape = inner_top_left.astype(np.int), tuple(map(np.int, inner_shape))
 
         img = endoscopy.crop(img, inner_top_left, inner_shape)
         img = cv2.resize(img, (640, 480))
 
-        # cv2.circle(img, (center[1], center[0]), radius, (255, 255, 0), 2)
-        # cv2.rectangle(img, (inner_top_left[1], inner_top_left[0]), (inner_top_left[1]+inner_shape[1], inner_top_left[0]+inner_shape[0]), (255, 0, 255), 2)
-        
         hg.addImg(img)
-        G, mean_pairwise_distance = hg.desiredHomography(ih.Img0)
+        G, mean_pairwise_distance = hg.desiredHomography(img0)
 
-        cv2.imshow('Initial Image', ih.Img0)
+        cv2.imshow('Initial Image', img0)
         cv2.imshow('Current Undistorted Image', hg.Imgs[0])  # undistorted
-        cv2.imshow('Error Image', cv2.warpPerspective(ih.Img0, G, (hg.Imgs[0].shape[1], hg.Imgs[0].shape[0])) - hg.Imgs[0])
+        cv2.imshow('Error Image', cv2.warpPerspective(img0, G, (hg.Imgs[0].shape[1], hg.Imgs[0].shape[0])) - hg.Imgs[0])
         cv2.waitKey(1)
 
         # Publish projective homography
