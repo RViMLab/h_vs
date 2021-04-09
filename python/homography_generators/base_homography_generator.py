@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from typing import List
+from typing import List, Tuple
 from abc import ABC, abstractmethod
 
 class BaseHomographyGenerator(ABC):
@@ -30,21 +30,25 @@ class BaseHomographyGenerator(ABC):
     def desiredHomography(self) -> np.ndarray:
         r"""Compute desired homography based on image buffer.
 
-        returns: G, projective homography (np.ndarray)
+        Return: 
+            G (np.ndarray): projective homography
         """
         return
 
 
-    def undistort(self, img: np.ndarray) -> np.ndarray:
+    def undistort(self, img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         r"""Undistord img.
-        param: img, image in OpenCV convention of size HxWxC
+        
+        Args: 
+            img (np.ndarray): Image in OpenCV convention of size HxWxC
 
-        returns: img, undistorted image
+        Return: 
+            (img, K) (Tuple[np.ndarray, np.ndarray]): Tuple containing undistorted image and new camera matrix
         """
         h, w = img.shape[:2]
-        newcameramtx, roi = cv2.getOptimalNewCameraMatrix(self._K, self._D, (w,h), 1, (w,h))
+        newcameramtx, roi = cv2.getOptimalNewCameraMatrix(self._K, self._D, (w,h), 1, (w,h))  # alpha set to 1.
 
-        return cv2.undistort(img, self._K, self._D, None, newcameramtx)
+        return cv2.undistort(img, self._K, self._D, None, newcameramtx), newcameramtx
 
     @property
     def Imgs(self) -> List[np.ndarray]:

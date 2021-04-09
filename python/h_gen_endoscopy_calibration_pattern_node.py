@@ -74,7 +74,7 @@ if __name__ == '__main__':
             rospy.sleep(rospy.Duration(0.1))
             continue
 
-        img0 = hg.undistort(ih.Img0)
+        img0, _ = hg.undistort(ih.Img0)
         mask = endoscopy.bilateralSegmentation(img0.astype(np.uint8), th=0.1)
         center, radius = tracker.updateBoundaryCircle(mask)
 
@@ -101,7 +101,7 @@ if __name__ == '__main__':
         cv2.namedWindow('Error Image')
 
         # Update with current image and compute desired projective homography
-        img = hg.undistort(ih.Img)
+        img, _ = hg.undistort(ih.Img)
         mask = endoscopy.bilateralSegmentation(img.astype(np.uint8), th=0.1)
         center, radius = tracker.updateBoundaryCircle(mask)
 
