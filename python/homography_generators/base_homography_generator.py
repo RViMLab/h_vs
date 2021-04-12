@@ -16,7 +16,7 @@ class BaseHomographyGenerator(ABC):
         r"""Append image buffer by img and undistort if desired.
         """
         if self._ud:
-            img = self.undistort(img)
+            img, _ = self.undistort(img)
         if len(self._imgs) >= self._buffer_size:
             self._imgs.pop(0)
         self._imgs.append(img)
