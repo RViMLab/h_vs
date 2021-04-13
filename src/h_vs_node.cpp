@@ -8,6 +8,10 @@
 #include <eigen_conversions/eigen_msg.h>
 
 #include <h_vs/homography_2d_vs.h>
+#include <h_vs/k_intrinsics.h>
+
+// Typedefs
+using RowMajorMatrix3d = Eigen::Matrix<double, 3, 3, Eigen::RowMajor>;
 
 
 // Forward declarations
@@ -15,6 +19,7 @@ Homography2DVisualServo hvs;
 
 ros::Subscriber G_sub;
 ros::Publisher twist_pub;
+ros::ServiceServer K_serv;
 
 
 // Projective homography callback
@@ -31,6 +36,31 @@ void GCb(const std_msgs::Float64MultiArrayConstPtr G_msg) {
     tf::twistEigenToMsg(twist, twist_msg);
 
     twist_pub.publish(twist_msg);
+};
+
+
+// Camera intrinsic service callback
+bool KCb(h_vs::k_intrinsicsRequest& request, h_vs::k_intrinsicsResponse& response) {
+
+    for (auto& dim : request.K.layout.dim) {
+        if (dim.size != 3) {
+            ROS_ERROR("Received camera intrinsics of wrong dimension %d for axis %s", dim.size, dim.label.c_str());
+            return false;
+        }
+    }
+
+    // K to Eigen via mapping
+    Eigen::Matrix3d K = Eigen::Map<const RowMajorMatrix3d>(request.K.data.data());
+
+    // Set
+    hvs.K(K);
+
+    // Generate response
+    response.K.layout = request.K.layout;
+    response.K.data.resize(K.size());
+    Eigen::Map<RowMajorMatrix3d>(response.K.data.data()) = hvs.K();
+
+    return true;
 };
 
 
@@ -54,7 +84,7 @@ int main(int argc, char** argv) {
     // Map parameters to eigen types
     Eigen::Vector3d lambda_v = Eigen::Vector3d::Map(std_lambda_v.data());
     Eigen::Vector3d lambda_w = Eigen::Vector3d::Map(std_lambda_w.data());
-    Eigen::Matrix3d K = Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>>(camera_matrix.data());
+    Eigen::Matrix3d K = Eigen::Map<RowMajorMatrix3d>(camera_matrix.data());
 
     // Initialize visual servo
     hvs = Homography2DVisualServo(
@@ -66,6 +96,9 @@ int main(int argc, char** argv) {
     // Subscribe to projective homography and publish desired linear and angular velocity
     G_sub = nh.subscribe<std_msgs::Float64MultiArray>("visual_servo/G", 1, GCb);
     twist_pub = nh.advertise<geometry_msgs::Twist>("visual_servo/twist", 1);
+
+    // Service to set camera intrinsic
+    K_serv = nh.advertiseService("visual_servo/K", KCb);
 
     ros::spin();
 

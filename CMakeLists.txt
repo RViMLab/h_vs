@@ -10,13 +10,24 @@ find_package(catkin REQUIRED COMPONENTS
     std_msgs
     geometry_msgs
     eigen_conversions
+    message_generation
 )
 
 # Other packages
 find_package(Eigen3 REQUIRED)
 
+# Generate services in the 'srv' folder
+add_service_files(
+  FILES k_intrinsics.srv # http://wiki.ros.org/catkin/CMakeLists.txt#msgs_srvs_actions, properly add messages, actions, services -> update rcom_msgs with exported targets
+)
+
+# Generate added messages and services with any dependencies listed here
+generate_messages(
+  DEPENDENCIES std_msgs
+)
+
 catkin_package(
-    CATKIN_DEPENDS roscpp camera_info_manager rospy camera_info_manager_py std_msgs geometry_msgs eigen_conversions
+    CATKIN_DEPENDS roscpp camera_info_manager rospy camera_info_manager_py std_msgs geometry_msgs eigen_conversions message_runtime
     INCLUDE_DIRS include ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS}
     DEPENDS EIGEN3
 )
@@ -33,6 +44,7 @@ add_library(h_vs src/homography_2d_vs.cpp)
 
 # Executable
 add_executable(h_vs_node src/h_vs_node.cpp)
+add_dependencies(h_vs_node ${${PROJECT_NAME}_EXPORTED_TARGETS})
 target_link_libraries(h_vs_node ${catkin_LIBRARIES} h_vs)
 
 # Install

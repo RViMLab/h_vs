@@ -27,6 +27,7 @@ class Homography2DVisualServo {
         Eigen::VectorXd computeFeedback(Eigen::Matrix3d& G, Eigen::Vector3d& p_star);
         Eigen::VectorXd computeFeedback(Eigen::Matrix3d& G);
 
+        Eigen::MatrixXd K() const { return _K; };  // value-oriented getter and setter
         void K(Eigen::Matrix3d& K) { _K = std::move(K); };
 
     private:

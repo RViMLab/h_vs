@@ -10,6 +10,7 @@ from cv_bridge import CvBridge
 
 import homography_generators.calibration_pattern_homography_generator as cphg
 from homography_generators.endoscopy import endoscopy
+from h_vs.srv import k_intrinsics, k_intrinsicsRequest
 
 
 class ImageHandler():
@@ -74,7 +75,7 @@ if __name__ == '__main__':
             rospy.sleep(rospy.Duration(0.1))
             continue
 
-        img0, _ = hg.undistort(ih.Img0)
+        img0, K_p = hg.undistort(ih.Img0)
         mask = endoscopy.bilateralSegmentation(img0.astype(np.uint8), th=0.1)
         center, radius = tracker.updateBoundaryCircle(mask)
 
@@ -94,6 +95,13 @@ if __name__ == '__main__':
     homography_pub = rospy.Publisher("visual_servo/G", Float64MultiArray, queue_size=1)
     error_pub = rospy.Publisher("visual_servo/mean_pairwise_distance", Float64, queue_size=1)
 
+    # Create service proxy to update camera intrinsics in h_vs
+    k_server = "visual_servo/K"
+    rospy.loginfo('h_gen_endoscopy_calibration_pattern_node: Waiting for K service server...')
+    rospy.wait_for_service(k_server)
+    rospy.loginfo('h_gen_endoscopy_calibration_pattern_node: Done.')
+    k_client = rospy.ServiceProxy(k_server, k_intrinsics)
+
     while not rospy.is_shutdown():
         # Show initial and desired images
         cv2.namedWindow('Initial Image')
@@ -101,7 +109,7 @@ if __name__ == '__main__':
         cv2.namedWindow('Error Image')
 
         # Update with current image and compute desired projective homography
-        img, _ = hg.undistort(ih.Img)
+        img, K_p = hg.undistort(ih.Img)
         mask = endoscopy.bilateralSegmentation(img.astype(np.uint8), th=0.1)
         center, radius = tracker.updateBoundaryCircle(mask)
 
@@ -109,15 +117,37 @@ if __name__ == '__main__':
         inner_top_left, inner_shape = inner_top_left.astype(np.int), tuple(map(np.int, inner_shape))
 
         img = endoscopy.crop(img, inner_top_left, inner_shape)
-        img = cv2.resize(img, (640, 480))
+
+        resize_shape = (480, 640)
+        K_pp = endoscopy.updateCroppedPrincipalPoint(inner_top_left, K_p)  # update camera intrinsics under cropping
+        K_pp = endoscopy.updateScaledPrincipalPoint(img.shape, resize_shape, K_p)  # update camera intrinsics under scaling
+        img = cv2.resize(img, (resize_shape[1], resize_shape[0]))
 
         hg.addImg(img)
         G, mean_pairwise_distance = hg.desiredHomography(img0)
+        # wrp = cv2.warpPerspective(img0, G, (hg.Imgs[0].shape[1], hg.Imgs[0].shape[0]))
 
         cv2.imshow('Initial Image', img0)
         cv2.imshow('Current Undistorted Image', hg.Imgs[0])  # undistorted
-        cv2.imshow('Error Image', cv2.warpPerspective(img0, G, (hg.Imgs[0].shape[1], hg.Imgs[0].shape[0])) - hg.Imgs[0])
+        cv2.imshow('Error Image', (
+            cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY) - cv2.cvtColor(hg.Imgs[0], cv2.COLOR_BGR2GRAY)
+        ))
         cv2.waitKey(1)
+
+        # Update camera intrinsics via service call
+        layout = MultiArrayLayout(
+            dim=[
+                MultiArrayDimension(label='rows', size=K_pp.shape[0]),
+                MultiArrayDimension(label='cols', size=K_pp.shape[1])
+            ],
+            data_offset=0
+        )
+        msg = Float64MultiArray(layout=layout, data=K_pp.flatten().tolist())
+
+        req = k_intrinsicsRequest()
+        req.K = msg
+
+        res = k_client(req)
 
         # Publish projective homography
         layout = MultiArrayLayout(
