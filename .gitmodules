@@ -1,6 +1,3 @@
 [submodule "python/homography_generators/endoscopy"]
 	path = python/homography_generators/endoscopy
 	url = https://github.com/RViMLab/endoscopy.git
-[submodule "python/homography_generators/homography_imitation_learning"]
-	path = python/homography_generators/homography_imitation_learning
-	url = https://github.com/RViMLab/homography_imitation_learning.git
