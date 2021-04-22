@@ -29,16 +29,16 @@ class ImageHandler():
         self._img0 = img0
         self._img = img
 
-        self.cv_bridge = CvBridge()
+        self._cv_bridge = CvBridge()
 
         self._img0_sub = rospy.Subscriber('visual_servo/img0', Image, self._img0_cb)
         self._img_sub = rospy.Subscriber('endoscope_camera/image_raw', Image, self._img_cb)
 
     def _img0_cb(self, msg):
-        self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+        self._img0 = self._cv_bridge.imgmsg_to_cv2(msg, "passthrough")
 
     def _img_cb(self, msg):
-        self._img = self.cv_bridge.imgmsg_to_cv2(msg, "passthrough")
+        self._img = self._cv_bridge.imgmsg_to_cv2(msg, "passthrough")
 
     @property
     def Img0(self):

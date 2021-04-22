@@ -16,17 +16,17 @@ class ImageHandler():
         self._img0 = img0
         self._img = img
 
-        self.cv_bridge = CvBridge()
+        self._cv_bridge = CvBridge()
 
         self._img0_sub = rospy.Subscriber('visual_servo/img0', Image, self._img0_cb)
         self._img_sub = rospy.Subscriber('camera/image_raw', Image, self._img_cb)
 
 
     def _img0_cb(self, msg):
-        self._img0 = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+        self._img0 = self._cv_bridge.imgmsg_to_cv2(msg, "bgr8")
 
     def _img_cb(self, msg):
-        self._img = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+        self._img = self._cv_bridge.imgmsg_to_cv2(msg, "bgr8")
 
     @property
     def Img0(self):
@@ -76,7 +76,7 @@ if __name__ == '__main__':
         G, mean_pairwise_distance = hg.desiredHomography(ih.Img0)
 
         cv2.imshow('Initial Image', ih.Img0)
-        cv2.imshow('Current Undistorted Image', hg.Imgs[0])  # undistorted
+        cv2.imshow('Current Undistorted Image', hg.ImgGraph.nodes[0]['data'])  # undistorted
         cv2.imshow('Error Image', ih.Img0 - ih.Img)
         # cv2.imshow('Error Image', cv2.warpPerspective(ih.Img0, G, (ih.Img.shape[1], ih.Img.shape[0])) - ih.Img)
         cv2.waitKey(1)

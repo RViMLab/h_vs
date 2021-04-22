@@ -10,7 +10,7 @@ class CalibrationPatternHomographyGenerator(BaseHomographyGenerator):
 
     def desiredHomography(self, img0, patternSize=(4, 11)) -> Tuple[np.ndarray, np.ndarray]:
 
-        img = self._imgs[0]
+        img = self._img_graph.nodes[0]['data']
 
         if self._ud:
             img0, _ = self.undistort(img0)
