@@ -1,0 +1,8 @@
+# goal
+std_msgs/Int32 id
+---
+# result
+std_msgs/Int32 id
+---
+# feedback
+std_msgs/Int32 id

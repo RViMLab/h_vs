@@ -163,3 +163,15 @@ if __name__ == '__main__':
 
     path = nx.dijkstra_path(hg.ImgGraph, src, dst)
     print('Path from {} to {}: {}'.format(src, dst, path))
+
+    # clear graph
+    hg.clearImgGraph()
+
+    # find path
+    src = hg.ID
+    dst = 0
+
+    try:
+        path = nx.dijkstra_path(hg.ImgGraph, src, dst)
+    except:
+        print('Path could not be found')

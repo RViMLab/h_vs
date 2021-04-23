@@ -7,7 +7,9 @@ find_package(catkin REQUIRED COMPONENTS
     camera_info_manager
     rospy
     camera_info_manager_py
+    actionlib
     std_msgs
+    sensor_msgs
     geometry_msgs
     eigen_conversions
     message_generation
@@ -16,14 +18,18 @@ find_package(catkin REQUIRED COMPONENTS
 # Other packages
 find_package(Eigen3 REQUIRED)
 
-# Generate services in the 'srv' folder
+# Generate services in the 'srv' folder and actions in 'action' folder
+add_action_files(
+    FILES h_vs.action
+)
+
 add_service_files(
-  FILES k_intrinsics.srv # http://wiki.ros.org/catkin/CMakeLists.txt#msgs_srvs_actions, properly add messages, actions, services -> update rcom_msgs with exported targets
+  FILES capture.srv k_intrinsics.srv # http://wiki.ros.org/catkin/CMakeLists.txt#msgs_srvs_actions, properly add messages, actions, services -> update rcom_msgs with exported targets
 )
 
 # Generate added messages and services with any dependencies listed here
 generate_messages(
-  DEPENDENCIES std_msgs
+  DEPENDENCIES std_msgs sensor_msgs actionlib_msgs
 )
 
 catkin_package(
@@ -59,6 +65,6 @@ install(
 )
 
 catkin_install_python(
-  PROGRAMS python/h_gen_node.py python/h_gen_calibration_pattern_node.py python/h_gen_endoscopy_calibration_pattern_node.py
+  PROGRAMS python/control_gallery_node.py python/h_gen_calibration_pattern_node.py python/h_gen_endoscopy_calibration_pattern_node.py python/h_gen_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

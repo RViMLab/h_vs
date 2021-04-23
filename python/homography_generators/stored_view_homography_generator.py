@@ -9,7 +9,7 @@ from homography_generators.homography_imitation_learning import utils
 
 class StoredViewHomographyGenerator(BaseHomographyGenerator):
     def __init__(self, K: np.ndarray, D: np.ndarray, undistort: bool=False) -> None:
-        super().__init__(K, D, buffer_size=1, undistort=undistort)
+        super().__init__(K, D, buffer_size=None, undistort=undistort)
 
         # self._feature_detector = cv2.xfeatures.SIFT_create()  # proprietary, how to use?
         # self._feature_detector = cv2.xfeatures.SURF_create()  # proprietary, how to use?
@@ -18,17 +18,15 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
 
         self._feature_homography = utils.FeatureHomographyEstimation(self._feature_detector)
 
-        self._graph = nx.DiGraph()
+    def desiredHomography(self, wrp: np.ndarray, id: int) -> Tuple[np.ndarray, np.ndarray]:
 
-    def desiredHomography(self, img0, patternSize=(4, 11)) -> Tuple[np.ndarray, np.ndarray]:
-
-        img = self._img_graph[0]
+        img = self._img_graph.nodes[id]['data']
 
         if self._ud:
             img0, _ = self.undistort(img0)
 
         # compute homography
-        G, _ = self._feature_homography(img0, img)
+        G, _ = self._feature_homography(img, wrp)
         mean_pairwise_distance = None
 
         if G is None:

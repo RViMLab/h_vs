@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 from PIL import Image, ImageTk
 import tkinter
 from tkinter import messagebox
@@ -5,14 +7,20 @@ import numpy as np
 import pandas as pd
 from enum import Enum
 import os
+from cv_bridge import CvBridge
 import sys
+from actionlib.simple_action_client import SimpleActionClient
 
 sys.path.append('/opt/ros/melodic/lib/python2.7/dist-packages')
 
 
 import rospy
+from std_srvs.srv import Empty, EmptyRequest
 from geometry_msgs.msg import Twist
 
+from h_vs.srv import capture, captureRequest
+from h_vs.msg import h_vsActionGoal, h_vsAction
+# from sensor_msgs.msg import Image
 
 # Switch Control Service
 #   - on button, change keyboard to automatic control and vice versa
@@ -50,23 +58,28 @@ class ControlGalleryGUI():
         self._master.bind("<KeyPress>", self._keydown)
         self._master.bind("<KeyRelease>", self._keyup) 
 
-        tkinter.Button(self._frame, text='Previous', command=lambda: self._switch_image(-1)).pack(side=tkinter.LEFT)
-        tkinter.Button(self._frame, text='Next', command=lambda: self._switch_image(+1)).pack(side=tkinter.LEFT)
+        tkinter.Button(self._frame, text='Previous', command=lambda: self._next_image(-1)).pack(side=tkinter.LEFT)
+        tkinter.Button(self._frame, text='Next', command=lambda: self._next_image(+1)).pack(side=tkinter.LEFT)
         tkinter.Button(self._frame, text='Switch', command=lambda: self._switch_control()).pack(side=tkinter.LEFT)
         tkinter.Button(self._frame, text='Execute', command=lambda: self._execute_control()).pack(side=tkinter.LEFT)
         tkinter.Button(self._frame, text='Capture', command=lambda: self._capture_image()).pack(side=tkinter.LEFT)
-        tkinter.Button(self._frame, text='Remove', command=lambda: self._remove_image()).pack(side=tkinter.LEFT)
         tkinter.Button(self._frame, text='Quit', command=self._master.quit).pack(side=tkinter.LEFT)
 
         # Member
+        self._img_df = pd.DataFrame(columns=['img', 'id'])
         self._current_id = -1
         self._control_mode = ControlMode(ControlMode.MANUAL)
         self.repeat(False)
         self._twist = Twist()
 
-        # ROS bindings
+        # ROS bindings, services: Capture, execute
         self._twist_pub = rospy.Publisher('visual_servo/twist', Twist, queue_size=1)
-        # switch, capture, remove, execute service
+        self._cv_bridge = CvBridge()
+        self._cap_client = rospy.ServiceProxy('visual_servo/capture', capture)
+
+
+        # self._cap_client.wait_for_service()
+        # self._execute_client.wait_for_service()
 
     def repeat(self, r: bool=True):
         if r:
@@ -84,9 +97,9 @@ class ControlGalleryGUI():
         if event.keysym == 'd':
             self._twist.linear.x  =  0.1
         if event.keysym == 'w':
-            self._twist.linear.y  =  0.1
-        if event.keysym == 's':
             self._twist.linear.y  = -0.1
+        if event.keysym == 's':
+            self._twist.linear.y  =  0.1
         if event.keysym == 'Left':
             self._twist.angular.z = -0.1
         if event.keysym == 'Right':
@@ -110,18 +123,30 @@ class ControlGalleryGUI():
 
         self._twist_pub.publish(self._twist)
 
-    def _switch_image(self, delta: int):
-        if not (0 <= self._current_id + delta < len(self._image_df)):
+    def _next_image(self, delta: int):
+        if not (0 <= self._current_id + delta < len(self._img_df)):
             messagebox.showinfo('End', 'No more images.')
             return
         self._current_id += delta
 
-        image = self._image_df.iloc[self._current_id].image
-        image = Image.fromarray(image)
+        img = self._img_df.iloc[self._current_id].img
+        img = Image.fromarray(img)
 
-        photo = ImageTk.PhotoImage(image)
-        self._label['image'] = photo
-        self._label.photo = photo
+        img = ImageTk.PhotoImage(img)
+        self._label['image'] = img
+        self._label['text'] = 'Image {}/{}'.format(self._current_id+1, len(self._img_df))
+        self._label.photo = img
+
+    def _switch_image(self, idx: int):
+        img = self._img_df.iloc[idx].img
+        img = Image.fromarray(img)
+
+        self._current_id = idx
+
+        img = ImageTk.PhotoImage(img)
+        self._label['image'] = img
+        self._label['text'] = 'Image {}/{}'.format(self._current_id+1, len(self._img_df))
+        self._label.photo = img
 
     def _switch_control(self):
         if self._control_mode is ControlMode.MANUAL:
@@ -134,14 +159,28 @@ class ControlGalleryGUI():
             raise ValueError('Unknown control mode.')
 
     def _capture_image(self):
-        # append id
-        # add image
-        pass
+        # send empty request
+        req = captureRequest()
+        res = self._cap_client(req)
 
-    def _remove_image(self):
-        # remove image with id
-        # remove id
-        pass
+        img = self._cv_bridge.imgmsg_to_cv2(res.capture)
+        id = res.id.data
+
+        self._img_df = self._img_df.append({'img': img, 'id': id}, ignore_index=True)
+        self._switch_image(id)
+
+    # def _remove_image(self):
+    #     if self._current_id == -1:
+    #         messagebox.showinfo('Empty', 'No further images to remove.')
+    #         return
+
+    #     self._img_df = self._img_df.drop(self._current_id)
+    #     self._current_id -= 1
+
+    #     if self._current_id == -1:
+    #         self._label.config(image='', text='Image 0/0')
+    #     else:
+    #         self._switch_image(self._current_id)
 
     def _execute_control(self):
         pass
@@ -153,4 +192,4 @@ if __name__ == '__main__':
     root = tkinter.Tk()
     gui = ControlGalleryGUI(root)
     root.mainloop()
-    gui.repeat(False)  # clear sys
+    gui.repeat(True)  # clear sys

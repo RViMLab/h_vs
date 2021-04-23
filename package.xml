@@ -14,7 +14,9 @@
   <depend>rospy</depend>
   <depend>camera_info_manager_py</depend>
   <depend>eigen</depend>
+  <depend>actionlib</depend>
   <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>eigen_conversions</depend>
   <exec_depend>message_runtime</exec_depend>
