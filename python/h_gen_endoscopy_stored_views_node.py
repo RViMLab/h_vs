@@ -1,44 +1,27 @@
 #!/usr/bin/python3
 
-import rospy
 import cv2
 import numpy as np
+from typing import Tuple
+import networkx as nx
+import rospy
+import actionlib
 import camera_info_manager
-from std_srvs.srv import Empty
 from std_msgs.msg import Int32, Float64, Float64MultiArray, MultiArrayLayout, MultiArrayDimension
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
-from typing import Tuple
-import networkx as nx
 
 from homography_generators.base_homography_generator import BaseHomographyGenerator
 import homography_generators.stored_view_homography_generator as svhg
 from homography_generators.endoscopy import endoscopy
 from h_vs.srv import k_intrinsics, k_intrinsicsRequest, capture, captureRequest, captureResponse
-from h_vs.msg import h_vsAction, h_vsActionGoal, h_vsGoal
-
-import actionlib
-
-
-
-
-
-# create action server
-# remove continuous h_gen computation
-# remove switch
-# on excute, compute dijkstra path,
-# move from current image to desired image and update current id under convergence
-# feedback current node, and resulting node
-# see http://wiki.ros.org/actionlib_tutorials/Tutorials/Writing%20a%20Simple%20Action%20Server%20using%20the%20Execute%20Callback%20%28Python%29
-
-# call action server with id -> ... target id? 
-
-
+from h_vs.msg import h_vsAction, h_vsGoal, h_vsFeedback, h_vsResult
 
 
 class StoredViewsActionServer(object):
     def __init__(self,
         hg: BaseHomographyGenerator,
+        mpd_th: int=5,
         img_topic: str='camera/image_raw',
         g_topic: str='visual_servo/G',
         e_topic: str='visual_servo/mean_pairwise_distance',
@@ -48,6 +31,9 @@ class StoredViewsActionServer(object):
     ):
         # homography generator
         self._hg = hg
+
+        # convergence threshold
+        self._mpd_th = mpd_th
 
         # image stream handler
         self._img = np.array([])
@@ -152,30 +138,21 @@ class StoredViewsActionServer(object):
     def _cap_cb(self, req: captureRequest) -> captureResponse:
         r"""Capture callback. Add current image to graph on capture call.
         """
-        img = self._img
+        wrp = self._img
 
         # TODO: add processing...
         # n_img, K_pp = self._process_endoscopic_image(img) process endoscopic view
 
-        img = self._cv_bridge.cv2_to_imgmsg(img)
+        wrp = self._cv_bridge.cv2_to_imgmsg(wrp)
 
         # add image to graph, get current id and respond to request
-        id = self._hg.addImg(img)
+        id = self._hg.addImg(wrp)
         res = captureResponse()
-        res.capture = img
+        res.capture = wrp
         res.id = Int32(id)
         return res
 
     def _execute_cb(self, goal: h_vsGoal) -> None:
-        # all logic goes here
-        # read goal id, perform dijkstra, execute path
-        # img = self._img
-
-        # TODO: add processing...
-        # img, K_pp = self._process_endoscopic_image(img, resize_shape=(480, 640))
-        # K_pp_req = self._build_intrinsic_message(K_pp)
-        # self._intrinsic_client(K_pp_req)
-
         # read goal id and find path from current node
         src_id = self._hg.ID
         target_id = goal.id.data
@@ -187,20 +164,57 @@ class StoredViewsActionServer(object):
             self._as.set_aborted()
             return
 
+        rospy.loginfo('{}: Found path from {} to {}: {}'.format(self._action_server, src_id, target_id, path))
+
         # execution loop
-        # while...
-        if self._as.is_preempt_requested():
-            rospy.loginfo('{}: Preempted.'.format(self._action_server))
-            self._as.set_preempted()
-            return
+        reached = False
+        checkpoint = 0
+        while not reached:
+            if self._as.is_preempt_requested():
+                rospy.loginfo('{}: Preempted.'.format(self._action_server))
+                self._as.set_preempted()
+                return
 
-        self._as.set_succeeded()
+            # poll current view
+            wrp = self._img
 
-        # G_msg = self._build_homography_message(G)
-        # self._homography_pub.publish(G_msg)
+            # # process image TODO: add
+            # wrp, K_pp = self._process_endoscopic_image(wrp, resize_shape=(480, 640))
+            # K_pp_req = self._build_intrinsic_message(K_pp)
+            # self._intrinsic_client(K_pp_req)  # update camera intrinsics in h_vs
 
+            # compute visual servo
+            G, duv, mean_pairwise_distance = self._hg.desiredHomography(wrp, id=path[checkpoint])
 
+            if mean_pairwise_distance is not None:
+                self._error_pub.publish(mean_pairwise_distance)
 
+                # publish feedback
+                feedback = h_vsFeedback()
+                feedback.id.data = self._hg.ID
+                feedback.mpd.data = mean_pairwise_distance
+                feedback.path.data = path
+                self._as.publish_feedback(feedback)
+
+                # rospy.loginfo('{}'.format(mean_pairwise_distance))  # TODO: remove
+                if mean_pairwise_distance < self._mpd_th:
+                    self._hg.ID = path[checkpoint]  # update current node
+                    rospy.loginfo('{}: Checkpoint reached. New node: {}. Current mean pairwise distance: {:.1f}'.format(self._action_server, self._hg.ID, mean_pairwise_distance))
+                    checkpoint += 1  # update next checkpoint
+                    if checkpoint == len(path):
+                        rospy.loginfo('{}: Desired view reached, final mean pairwise distance: {:.1f}'.format(self._action_server, mean_pairwise_distance))
+                        reached = True
+                else:  # execute motion
+                    msg = self._build_multiarray(G)
+                    self._homography_pub.publish(msg)
+            else:
+                rospy.sleep(rospy.Duration(0.1))
+
+        result = h_vsResult()
+        result.id.data = self._hg.ID
+        result.mpd.data = mean_pairwise_distance
+        result.path.data = path
+        self._as.set_succeeded(result)
 
 
 if __name__ == '__main__':
@@ -220,93 +234,7 @@ if __name__ == '__main__':
     # Initialize homography generator
     hg = svhg.StoredViewHomographyGenerator(K=K, D=D, undistort=False)  # undistort manually below
 
-    
-    
+    # Start action server
     action_server = StoredViewsActionServer(hg)
 
-
     rospy.spin()
-
-
-    # # Handle initial and current images
-    # shape = [camera_info.height, camera_info.width, 3]
-
-    # ih = ImageHandler()
-
-    # # Crop endoscopic view
-    # tracker = endoscopy.CoMBoundaryTracker()
-
-    # # Publish desired projective homography and visual error
-    # homography_pub = rospy.Publisher("visual_servo/G", Float64MultiArray, queue_size=1)
-    # error_pub = rospy.Publisher("visual_servo/mean_pairwise_distance", Float64, queue_size=1)
-
-    # # Create service proxy to update camera intrinsics in h_vs
-    # k_server = "visual_servo/K"
-    # rospy.loginfo('h_gen_endoscopy_stored_views_node: Waiting for K service server...')
-    # rospy.wait_for_service(k_server)
-    # rospy.loginfo('h_gen_endoscopy_stored_views_node: Done.')
-    # k_client = rospy.ServiceProxy(k_server, k_intrinsics)
-
-    # while not rospy.is_shutdown():
-    #     if not gen_h:
-    #         rospy.sleep(rospy.Duration(0.1))
-    #         continue
-
-    #     # Show initial and desired images
-    #     cv2.namedWindow('Initial Image')
-    #     cv2.namedWindow('Current Undistorted Image')
-    #     cv2.namedWindow('Error Image')
-
-    #     # Update with current image and compute desired projective homography
-    #     img, K_p = hg.undistort(ih.Img)
-    #     mask = endoscopy.bilateralSegmentation(img.astype(np.uint8), th=0.1)
-    #     center, radius = tracker.updateBoundaryCircle(mask)
-
-    #     inner_top_left, inner_shape = endoscopy.maxRectangleInCircle(mask.shape, center, radius)
-    #     inner_top_left, inner_shape = inner_top_left.astype(np.int), tuple(map(np.int, inner_shape))
-
-    #     img = endoscopy.crop(img, inner_top_left, inner_shape)
-
-    #     resize_shape = (480, 640)
-    #     K_pp = endoscopy.updateCroppedPrincipalPoint(inner_top_left, K_p)  # update camera intrinsics under cropping
-    #     K_pp = endoscopy.updateScaledPrincipalPoint(img.shape, resize_shape, K_p)  # update camera intrinsics under scaling
-    #     img = cv2.resize(img, (resize_shape[1], resize_shape[0]))
-
-    #     hg.addImg(img)
-    #     G, mean_pairwise_distance = hg.desiredHomography(img0)
-    #     # wrp = cv2.warpPerspective(img0, G, (hg.ImgGraph.nodes[0]['data'].shape[1], hg.ImgGraph.nodes[0]['data'].shape[0]))
-
-    #     cv2.imshow('Initial Image', img0)
-    #     cv2.imshow('Current Undistorted Image', hg.ImgGraph.nodes[0]['data'])  # undistorted
-    #     cv2.imshow('Error Image', (
-    #         cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY) - cv2.cvtColor(hg.ImgGraph.nodes[0]['data'], cv2.COLOR_BGR2GRAY)
-    #     ))
-    #     cv2.waitKey(1)
-
-    #     # Update camera intrinsics via service call
-    #     layout = MultiArrayLayout(
-    #         dim=[
-    #             MultiArrayDimension(label='rows', size=K_pp.shape[0]),
-    #             MultiArrayDimension(label='cols', size=K_pp.shape[1])
-    #         ],
-    #         data_offset=0
-    #     )
-    #     msg = Float64MultiArray(layout=layout, data=K_pp.flatten().tolist())
-
-    #     req = k_intrinsicsRequest()
-    #     req.K = msg
-
-    #     res = k_client(req)
-
-    #     # Publish projective homography
-    #     layout = MultiArrayLayout(
-    #         dim=[
-    #             MultiArrayDimension(label='rows', size=G.shape[0]),
-    #             MultiArrayDimension(label='cols', size=G.shape[1])
-    #         ],
-    #         data_offset=0
-    #     )
-    #     msg = Float64MultiArray(layout=layout, data=G.flatten().tolist())
-    #     homography_pub.publish(msg)
-    #     if mean_pairwise_distance:
-    #         error_pub.publish(mean_pairwise_distance)

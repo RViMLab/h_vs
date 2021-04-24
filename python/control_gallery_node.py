@@ -1,41 +1,19 @@
 #!/usr/bin/python3
 
-from PIL import Image, ImageTk
+import os
+import sys
 import tkinter
 from tkinter import messagebox
-import numpy as np
+from PIL import Image, ImageTk
 import pandas as pd
 from enum import Enum
-import os
+import rospy
 from cv_bridge import CvBridge
-import sys
+from geometry_msgs.msg import Twist
 from actionlib.simple_action_client import SimpleActionClient
 
-sys.path.append('/opt/ros/melodic/lib/python2.7/dist-packages')
-
-
-import rospy
-from std_srvs.srv import Empty, EmptyRequest
-from geometry_msgs.msg import Twist
-
 from h_vs.srv import capture, captureRequest
-from h_vs.msg import h_vsActionGoal, h_vsAction
-# from sensor_msgs.msg import Image
-
-# Switch Control Service
-#   - on button, change keyboard to automatic control and vice versa
-#   - h_vs: G -> ...
-#   - h_vs: twist -> ... either of these publishers, client?
-
-# Capture Image Service
-#   - on button, send capture to server
-#   - add immage and id to buffer, return to this
-
-# Remove Image Service
-#   - on button, remove image for client and server
-
-# Execute Service
-#   - on button, send id to servo
+from h_vs.msg import h_vsGoal, h_vsAction
 
 
 class ControlMode(Enum):
@@ -76,10 +54,9 @@ class ControlGalleryGUI():
         self._twist_pub = rospy.Publisher('visual_servo/twist', Twist, queue_size=1)
         self._cv_bridge = CvBridge()
         self._cap_client = rospy.ServiceProxy('visual_servo/capture', capture)
+        self._execute_client = SimpleActionClient('visual_servo/execute', h_vsAction)
 
-
-        # self._cap_client.wait_for_service()
-        # self._execute_client.wait_for_service()
+        self._cap_client.wait_for_service()
 
     def repeat(self, r: bool=True):
         if r:
@@ -169,21 +146,10 @@ class ControlGalleryGUI():
         self._img_df = self._img_df.append({'img': img, 'id': id}, ignore_index=True)
         self._switch_image(id)
 
-    # def _remove_image(self):
-    #     if self._current_id == -1:
-    #         messagebox.showinfo('Empty', 'No further images to remove.')
-    #         return
-
-    #     self._img_df = self._img_df.drop(self._current_id)
-    #     self._current_id -= 1
-
-    #     if self._current_id == -1:
-    #         self._label.config(image='', text='Image 0/0')
-    #     else:
-    #         self._switch_image(self._current_id)
-
     def _execute_control(self):
-        pass
+        goal = h_vsGoal()
+        goal.id.data = self._current_id
+        self._execute_client.send_goal(goal)
 
 
 if __name__ == '__main__':

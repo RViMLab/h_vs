@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 from typing import Tuple
-import networkx as nx
+from cv_bridge import CvBridge
 
 from homography_generators.base_homography_generator import BaseHomographyGenerator
 from homography_generators.homography_imitation_learning import utils
@@ -16,39 +16,25 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
         self._feature_detector = cv2.ORB_create(nfeatures=2000)
         # self._feature_detector = cv2.FastFeatureDetector_create()
 
+        self._cv_bridge = CvBridge()
         self._feature_homography = utils.FeatureHomographyEstimation(self._feature_detector)
 
     def desiredHomography(self, wrp: np.ndarray, id: int) -> Tuple[np.ndarray, np.ndarray]:
 
         img = self._img_graph.nodes[id]['data']
+        img = self._cv_bridge.imgmsg_to_cv2(img)
 
         if self._ud:
             img0, _ = self.undistort(img0)
 
         # compute homography
-        G, _ = self._feature_homography(img, wrp)
+        G, duv = self._feature_homography(img, wrp)
         mean_pairwise_distance = None
 
         if G is None:
             G = np.eye(3)
 
-        # if found0 and found:
-        #     G, _ = cv2.findHomography(pts0, pts, cv2.RANSAC)
+        if duv is not None:
+            mean_pairwise_distance = np.linalg.norm(duv, axis=1).mean()
 
-        #     # evaluate in normalized image coordinates
-        #     # K^(-1)*[(pts,1) - (pts0,1)]
-        #     K_inv = np.linalg.inv(self._K)
-
-        #     pts  = np.concatenate([pts, np.ones((pts.shape[0], pts.shape[1], 1))], axis=2)
-        #     pts0 = np.concatenate([pts0, np.ones((pts0.shape[0], pts0.shape[1], 1))], axis=2)
-
-        #     # Nx1x3 -> Nx3x1
-        #     pts  = pts.transpose(0, 2, 1)
-        #     pts0 = pts0.transpose(0, 2, 1)
-
-        #     pts  = np.matmul(K_inv, pts)
-        #     pts0 = np.matmul(K_inv, pts0)
-
-        #     mean_pairwise_distance = np.linalg.norm(pts[:,:-1] - pts0[:,:-1], axis=1).mean()
-
-        return G, mean_pairwise_distance
+        return G, duv, mean_pairwise_distance

@@ -3,6 +3,10 @@ std_msgs/Int32 id
 ---
 # result
 std_msgs/Int32 id
+std_msgs/Float64 mpd
+std_msgs/Int32MultiArray path
 ---
 # feedback
 std_msgs/Int32 id
+std_msgs/Float64 mpd
+std_msgs/Int32MultiArray path
