@@ -11,8 +11,8 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
     def __init__(self, K: np.ndarray, D: np.ndarray, undistort: bool=False) -> None:
         super().__init__(K, D, buffer_size=None, undistort=undistort)
 
-        # self._feature_detector = cv2.xfeatures.SIFT_create()  # proprietary, how to use?
-        # self._feature_detector = cv2.xfeatures.SURF_create()  # proprietary, how to use?
+        # self._feature_detector = cv2.xfeatures2d.SIFT_create()  # proprietary, how to use?
+        # self._feature_detector = cv2.xfeatures2d.SURF_create()  # proprietary, how to use?
         self._feature_detector = cv2.ORB_create(nfeatures=2000)
         # self._feature_detector = cv2.FastFeatureDetector_create()
 
