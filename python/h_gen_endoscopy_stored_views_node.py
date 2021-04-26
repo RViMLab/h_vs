@@ -21,7 +21,9 @@ from h_vs.msg import h_vsAction, h_vsGoal, h_vsFeedback, h_vsResult
 class StoredViewsActionServer(object):
     def __init__(self,
         hg: BaseHomographyGenerator,
-        mpd_th: int=5,
+        mpd_th: int=3,
+        resize_shape: tuple=(480, 640),
+        pre_process: bool=True,
         img_topic: str='camera/image_raw',
         g_topic: str='visual_servo/G',
         e_topic: str='visual_servo/mean_pairwise_distance',
@@ -34,6 +36,10 @@ class StoredViewsActionServer(object):
 
         # convergence threshold
         self._mpd_th = mpd_th
+
+        # resize shape and pre-processing
+        self._resize_shape = resize_shape
+        self._pre_process = pre_process
 
         # image stream handler
         self._img = np.array([])
@@ -133,12 +139,26 @@ class StoredViewsActionServer(object):
     def _img_cb(self, msg: Image) -> None:
         r"""Keeps the current image as numpy array.
         """
-        self._img = self._cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+        img = self._cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+
+        if self._pre_process:
+            img, K_pp = self._process_endoscopic_image(img, resize_shape=self._resize_shape)
+            if img.shape[0] is not 0:
+                K_pp_req = self._build_intrinsic_message(K_pp)
+                self._intrinsic_client(K_pp_req)  # update camera intrinsics in h_vs
+                self._img = img
+        else:
+            self._img = img
 
     def _cap_cb(self, req: captureRequest) -> captureResponse:
         r"""Capture callback. Add current image to graph on capture call.
         """
         wrp = self._img
+        if wrp.shape[0] is 0:
+            rospy.loginfo('{}: Capture request failed. Endoscopic view not initialized yet, check lighting.'.format(self._action_server))
+            res = captureResponse()
+            res.success.data = False
+            return res
 
         # TODO: add processing...
         # n_img, K_pp = self._process_endoscopic_image(img) process endoscopic view
@@ -150,6 +170,7 @@ class StoredViewsActionServer(object):
         res = captureResponse()
         res.capture = wrp
         res.id = Int32(id)
+        res.success.data = True
         return res
 
     def _execute_cb(self, goal: h_vsGoal) -> None:
@@ -204,6 +225,10 @@ class StoredViewsActionServer(object):
                     if checkpoint == len(path):
                         rospy.loginfo('{}: Desired view reached, final mean pairwise distance: {:.1f}'.format(self._action_server, mean_pairwise_distance))
                         reached = True
+
+                        # publish steady state
+                        msg = self._build_multiarray(np.eye(3))
+                        self._homography_pub.publish(msg)
                 else:  # execute motion
                     msg = self._build_multiarray(G)
                     self._homography_pub.publish(msg)
@@ -223,6 +248,7 @@ if __name__ == '__main__':
 
     cname = rospy.get_param("h_gen_endoscopy_stored_views_node/cname")
     url = rospy.get_param("h_gen_endoscopy_stored_views_node/url")
+    sim = rospy.get_param("h_gen_endoscopy_stored_views_node/sim")
 
     camera_info_manager = camera_info_manager.CameraInfoManager(cname, url)
     camera_info_manager.loadCameraInfo()  # explicitely load info
@@ -235,6 +261,6 @@ if __name__ == '__main__':
     hg = svhg.StoredViewHomographyGenerator(K=K, D=D, undistort=False)  # undistort manually below
 
     # Start action server
-    action_server = StoredViewsActionServer(hg)
+    action_server = StoredViewsActionServer(hg, pre_process=(not sim))
 
     rospy.spin()

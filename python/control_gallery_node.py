@@ -139,6 +139,8 @@ class ControlGalleryGUI():
         # send empty request
         req = captureRequest()
         res = self._cap_client(req)
+        if not res.success.data:
+            return
 
         img = self._cv_bridge.imgmsg_to_cv2(res.capture)
         id = res.id.data
