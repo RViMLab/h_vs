@@ -22,8 +22,9 @@ class ControlMode(Enum):
 
 
 class ControlGalleryGUI():
-    def __init__(self, master: tkinter.Tk):
+    def __init__(self, master: tkinter.Tk, repeat=False):
         self._master = master
+        self._repeat = repeat
 
         # GUI
         self._label = tkinter.Label(self._master, compound=tkinter.TOP)
@@ -47,7 +48,7 @@ class ControlGalleryGUI():
         self._img_df = pd.DataFrame(columns=['img', 'id'])
         self._current_id = -1
         self._control_mode = ControlMode(ControlMode.MANUAL)
-        self.repeat(False)
+        self.repeat(self._repeat)
         self._twist = Twist()
 
         # ROS bindings, services: Capture, execute
@@ -130,7 +131,7 @@ class ControlGalleryGUI():
             self.repeat(True)
             self._control_mode = ControlMode.AUTOMATIC
         elif self._control_mode is ControlMode.AUTOMATIC:
-            self.repeat(False)
+            self.repeat(self._repeat)
             self._control_mode = ControlMode.MANUAL
         else:
             raise ValueError('Unknown control mode.')
@@ -157,7 +158,9 @@ class ControlGalleryGUI():
 if __name__ == '__main__':
     rospy.init_node('control_gallery_node')
 
+    repeat = rospy.get_param('control_gallery_node/repeat')
+
     root = tkinter.Tk()
-    gui = ControlGalleryGUI(root)
+    gui = ControlGalleryGUI(root, repeat)
     root.mainloop()
     gui.repeat(True)  # clear sys
