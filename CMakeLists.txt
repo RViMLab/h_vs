@@ -24,7 +24,7 @@ add_action_files(
 )
 
 add_service_files(
-  FILES capture.srv k_intrinsics.srv # http://wiki.ros.org/catkin/CMakeLists.txt#msgs_srvs_actions, properly add messages, actions, services -> update rcom_msgs with exported targets
+  FILES capture.srv k_intrinsics.srv # http://wiki.ros.org/catkin/CMakeLists.txt#msgs_srvs_actions, properly add messages, actions, services -> update rcm_msgs with exported targets
 )
 
 # Generate added messages and services with any dependencies listed here
