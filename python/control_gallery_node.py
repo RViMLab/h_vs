@@ -69,15 +69,34 @@ class ControlGalleryGUI():
         if self._control_mode is not ControlMode.MANUAL:
             messagebox.showinfo('Control', 'Switch to manual control first.')
             return
+        
+        # # xyz w_z control
+        # if event.keysym == 'a':
+        #     self._twist.linear.x  = -0.1
+        # if event.keysym == 'd':
+        #     self._twist.linear.x  =  0.1
+        # if event.keysym == 'w':
+        #     self._twist.linear.y  = -0.1
+        # if event.keysym == 's':
+        #     self._twist.linear.y  =  0.1
+        # if event.keysym == 'Left':
+        #     self._twist.angular.z = -0.1
+        # if event.keysym == 'Right':
+        #     self._twist.angular.z =  0.1
+        # if event.keysym == 'Up':
+        #     self._twist.linear.z  =  0.1
+        # if event.keysym == 'Down':
+        #     self._twist.linear.z  = -0.1
 
+        # z w_x w_y w_z control
         if event.keysym == 'a':
-            self._twist.linear.x  = -0.1
+            self._twist.angular.y  = -0.1
         if event.keysym == 'd':
-            self._twist.linear.x  =  0.1
+            self._twist.angular.y  =  0.1
         if event.keysym == 'w':
-            self._twist.linear.y  = -0.1
+            self._twist.angular.x  =  0.1
         if event.keysym == 's':
-            self._twist.linear.y  =  0.1
+            self._twist.angular.x  = -0.1
         if event.keysym == 'Left':
             self._twist.angular.z = -0.1
         if event.keysym == 'Right':
@@ -90,10 +109,21 @@ class ControlGalleryGUI():
         self._twist_pub.publish(self._twist)
 
     def _keyup(self, event: tkinter.Event):
+        # # xyz w_z control
+        # if event.keysym == 'a' or event.keysym == 'd':
+        #     self._twist.linear.x  = 0.0
+        # if event.keysym == 'w' or event.keysym == 's':
+        #     self._twist.linear.y  = 0.0
+        # if event.keysym == 'Left' or event.keysym == 'Right':
+        #     self._twist.angular.z = 0.0
+        # if event.keysym == 'Up' or event.keysym == 'Down':
+        #     self._twist.linear.z  = 0.0
+
+        # z w_x w_y w_z control
         if event.keysym == 'a' or event.keysym == 'd':
-            self._twist.linear.x  = 0.0
+            self._twist.angular.y  = 0.0
         if event.keysym == 'w' or event.keysym == 's':
-            self._twist.linear.y  = 0.0
+            self._twist.angular.x  = 0.0
         if event.keysym == 'Left' or event.keysym == 'Right':
             self._twist.angular.z = 0.0
         if event.keysym == 'Up' or event.keysym == 'Down':
@@ -144,6 +174,7 @@ class ControlGalleryGUI():
             return
 
         img = self._cv_bridge.imgmsg_to_cv2(res.capture)
+        img = img[...,::-1]  # BGR -> RGB
         id = res.id.data
 
         self._img_df = self._img_df.append({'img': img, 'id': id}, ignore_index=True)

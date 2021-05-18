@@ -21,8 +21,8 @@ from h_vs.msg import h_vsAction, h_vsGoal, h_vsFeedback, h_vsResult
 class StoredViewsActionServer(object):
     def __init__(self,
         hg: BaseHomographyGenerator,
-        mpd_th: int=3,
-        resize_shape: tuple=(480, 640),
+        mpd_th: int=10,
+        resize_shape: tuple=(240, 320),
         pre_process: bool=True,
         img_topic: str='camera/image_raw',
         g_topic: str='visual_servo/G',
@@ -199,11 +199,6 @@ class StoredViewsActionServer(object):
             # poll current view
             wrp = self._img
 
-            # # process image TODO: add
-            # wrp, K_pp = self._process_endoscopic_image(wrp, resize_shape=(480, 640))
-            # K_pp_req = self._build_intrinsic_message(K_pp)
-            # self._intrinsic_client(K_pp_req)  # update camera intrinsics in h_vs
-
             # compute visual servo
             G, duv, mean_pairwise_distance = self._hg.desiredHomography(wrp, id=path[checkpoint])
 
@@ -233,7 +228,8 @@ class StoredViewsActionServer(object):
                     msg = self._build_multiarray(G)
                     self._homography_pub.publish(msg)
             else:
-                rospy.sleep(rospy.Duration(0.1))
+                rospy.loginfo('{}: No homography found.'.format(self._action_server))
+                rospy.sleep(rospy.Duration(0.01))
 
         result = h_vsResult()
         result.id.data = self._hg.ID
