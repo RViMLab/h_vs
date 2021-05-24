@@ -27,6 +27,10 @@ add_service_files(
   FILES capture.srv k_intrinsics.srv # http://wiki.ros.org/catkin/CMakeLists.txt#msgs_srvs_actions, properly add messages, actions, services -> update rcm_msgs with exported targets
 )
 
+add_message_files(
+  FILES pairwise_distance.msg
+)
+
 # Generate added messages and services with any dependencies listed here
 generate_messages(
   DEPENDENCIES std_msgs sensor_msgs actionlib_msgs

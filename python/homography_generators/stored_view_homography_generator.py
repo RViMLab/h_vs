@@ -21,7 +21,7 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
         self._cv_bridge = CvBridge()
         self._feature_homography = utils.FeatureHomographyEstimation(self._feature_detector)
 
-    def desiredHomography(self, wrp: np.ndarray, id: int) -> Tuple[np.ndarray, np.ndarray]:
+    def desiredHomography(self, wrp: np.ndarray, id: int) -> Tuple[np.ndarray, np.ndarray, np.Float64, np.Float64, np.int32]:
 
         img = self._img_graph.nodes[id]['data']
         img = self._cv_bridge.imgmsg_to_cv2(img)
@@ -29,6 +29,7 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
         # compute homography
         G, duv, kp_img, kp_wrp = self._feature_homography(img.astype(np.uint8), wrp.astype(np.uint8), return_kp=True)
         mean_pairwise_distance = None
+        std_pairwise_distance = None
 
         # wrp_pred = cv2.warpPerspective(img, G, (wrp.shape[1], wrp.shape[0]))
         # blend = yt_alpha_blend(wrp_pred, wrp)
@@ -44,4 +45,6 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
         if kp_img is not None and kp_wrp is not None:
             kp_img, kp_wrp = kp_img.reshape(-1, 2), kp_wrp.reshape(-1, 2)
             mean_pairwise_distance = np.linalg.norm(kp_img - kp_wrp, axis=1).mean()
-        return G, duv, mean_pairwise_distance
+            std_pairwise_distance = np.linalg.norm(kp_img - kp_wrp, axis=1).std()
+            matches = kp_img.shape[0]
+        return G, duv, mean_pairwise_distance, std_pairwise_distance, matches

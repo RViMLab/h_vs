@@ -8,7 +8,7 @@ class CalibrationPatternHomographyGenerator(BaseHomographyGenerator):
     def __init__(self, K: np.ndarray, D: np.ndarray, undistort: bool=False) -> None:
         super().__init__(K, D, buffer_size=1, undistort=undistort)
 
-    def desiredHomography(self, img0, patternSize=(4, 11)) -> Tuple[np.ndarray, np.ndarray]:
+    def desiredHomography(self, img0, patternSize=(4, 11)) -> Tuple[np.ndarray, np.Float64]:
 
         img = self._img_graph.nodes[0]['data']
 

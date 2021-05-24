@@ -15,7 +15,7 @@ from homography_generators.base_homography_generator import BaseHomographyGenera
 import homography_generators.stored_view_homography_generator as svhg
 from homography_generators.endoscopy import endoscopy
 from h_vs.srv import k_intrinsics, k_intrinsicsRequest, capture, captureRequest, captureResponse
-from h_vs.msg import h_vsAction, h_vsGoal, h_vsFeedback, h_vsResult
+from h_vs.msg import h_vsAction, h_vsGoal, h_vsFeedback, h_vsResult, pairwise_distance
 
 
 class StoredViewsActionServer(object):
@@ -24,12 +24,14 @@ class StoredViewsActionServer(object):
         mpd_th: int=10,
         resize_shape: tuple=(240, 320),
         pre_process: bool=True,
+        h_rcm_vs_state: str='h_rcm_vs/RCM_ActionServer/state',
         img_topic: str='camera/image_raw',
         g_topic: str='visual_servo/G',
-        e_topic: str='visual_servo/mean_pairwise_distance',
+        e_topic: str='visual_servo/pairwise_distance',
         intrinsic_service: str='visual_servo/K',
         cap_service: str='visual_servo/capture',
-        action_server: str='visual_servo/execute'
+        action_server: str='visual_servo/execute',
+        log_path: str='/tmp/h_gen_endoscopy_stored_views'
     ):
         # homography generator
         self._hg = hg
@@ -51,7 +53,7 @@ class StoredViewsActionServer(object):
         self._g_topic = g_topic
         self._homography_pub = rospy.Publisher(self._g_topic, Float64MultiArray, queue_size=1)
         self._e_ropic = e_topic
-        self._error_pub = rospy.Publisher(self._e_ropic, Float64, queue_size=1)
+        self._error_pub = rospy.Publisher(self._e_ropic, pairwise_distance, queue_size=1)
 
         # create service proxy to update camera intrinsics in h_vs
         self._intrinsic_service = intrinsic_service
@@ -71,6 +73,8 @@ class StoredViewsActionServer(object):
         self._action_server = action_server
         self._as = actionlib.SimpleActionServer(self._action_server, h_vsAction, execute_cb=self._execute_cb, auto_start=False)
         self._as.start()
+
+        self._log_path = log_path
 
     def _process_endoscopic_image(self, img: np.ndarray, resize_shape: tuple=(480, 640)) -> Tuple[np.ndarray, np.ndarray]:
         r"""Undistorts an endoscopic view, crops, and updates the camera matrix.
@@ -160,9 +164,6 @@ class StoredViewsActionServer(object):
             res.success.data = False
             return res
 
-        # TODO: add processing...
-        # n_img, K_pp = self._process_endoscopic_image(img) process endoscopic view
-
         wrp = self._cv_bridge.cv2_to_imgmsg(wrp)
 
         # add image to graph, get current id and respond to request
@@ -171,6 +172,9 @@ class StoredViewsActionServer(object):
         res.capture = wrp
         res.id = Int32(id)
         res.success.data = True
+
+        # TODO: add current tip position
+
         return res
 
     def _execute_cb(self, goal: h_vsGoal) -> None:
@@ -200,10 +204,10 @@ class StoredViewsActionServer(object):
             wrp = self._img
 
             # compute visual servo
-            G, duv, mean_pairwise_distance = self._hg.desiredHomography(wrp, id=path[checkpoint])
+            G, duv, mean_pairwise_distance, std_pairwise_distance, n_matches = self._hg.desiredHomography(wrp, id=path[checkpoint])
 
             if mean_pairwise_distance is not None:
-                self._error_pub.publish(mean_pairwise_distance)
+                self._error_pub.publish(pairwise_distance(mean_pairwise_distance, std_pairwise_distance, n_matches))
 
                 # publish feedback
                 feedback = h_vsFeedback()
@@ -212,11 +216,20 @@ class StoredViewsActionServer(object):
                 feedback.path.data = path
                 self._as.publish_feedback(feedback)
 
-                # rospy.loginfo('{}'.format(mean_pairwise_distance))  # TODO: remove
                 if mean_pairwise_distance < self._mpd_th:
                     self._hg.ID = path[checkpoint]  # update current node
                     rospy.loginfo('{}: Checkpoint reached. New node: {}. Current mean pairwise distance: {:.1f}'.format(self._action_server, self._hg.ID, mean_pairwise_distance))
                     checkpoint += 1  # update next checkpoint
+                    
+                    # TODO: log target and current view, also log current and target pose
+
+                    # img = self._img_graph.nodes[id]['data']
+                    # img = self._cv_bridge.imgmsg_to_cv2(img)
+                    target = self._cv_bridge.imgmsg_to_cv2(self._hg.ImgGraph.nodes[self._hg.ID]['data'])
+
+                    cv2.imwrite(target, '{}/img/target_{}.png'.format(self._log_path, self._hg.ID))  # target view
+                    cv2.imwrite(wrp, '{}/img/final_{}.png'.format(self._log_path, self._hg.ID))      # current view is wrp
+
                     if checkpoint == len(path):
                         rospy.loginfo('{}: Desired view reached, final mean pairwise distance: {:.1f}'.format(self._action_server, mean_pairwise_distance))
                         reached = True
