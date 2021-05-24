@@ -223,8 +223,7 @@ class StoredViewsActionServer(object):
                     
                     # TODO: log target and current view, also log current and target pose
 
-                    # img = self._img_graph.nodes[id]['data']
-                    # img = self._cv_bridge.imgmsg_to_cv2(img)
+
                     target = self._cv_bridge.imgmsg_to_cv2(self._hg.ImgGraph.nodes[self._hg.ID]['data'])
 
                     cv2.imwrite(target, '{}/img/target_{}.png'.format(self._log_path, self._hg.ID))  # target view
