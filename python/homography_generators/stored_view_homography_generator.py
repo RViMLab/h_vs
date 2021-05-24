@@ -21,7 +21,7 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
         self._cv_bridge = CvBridge()
         self._feature_homography = utils.FeatureHomographyEstimation(self._feature_detector)
 
-    def desiredHomography(self, wrp: np.ndarray, id: int) -> Tuple[np.ndarray, np.ndarray, np.Float64, np.Float64, np.int32]:
+    def desiredHomography(self, wrp: np.ndarray, id: int) -> Tuple[np.ndarray, np.ndarray, np.float64, np.float64, np.int32]:
 
         img = self._img_graph.nodes[id]['data']
         img = self._cv_bridge.imgmsg_to_cv2(img)

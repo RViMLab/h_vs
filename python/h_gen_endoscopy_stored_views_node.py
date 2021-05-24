@@ -1,12 +1,15 @@
 #!/usr/bin/python3
 
+import os
 import cv2
 import numpy as np
 from typing import Tuple
 import networkx as nx
+import pandas as pd
 import rospy
 import actionlib
 import camera_info_manager
+from rospy.topics import Subscriber
 from std_msgs.msg import Int32, Float64, Float64MultiArray, MultiArrayLayout, MultiArrayDimension
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
@@ -16,6 +19,7 @@ import homography_generators.stored_view_homography_generator as svhg
 from homography_generators.endoscopy import endoscopy
 from h_vs.srv import k_intrinsics, k_intrinsicsRequest, capture, captureRequest, captureResponse
 from h_vs.msg import h_vsAction, h_vsGoal, h_vsFeedback, h_vsResult, pairwise_distance
+from rcm_msgs.msg import rcm
 
 
 class StoredViewsActionServer(object):
@@ -42,6 +46,13 @@ class StoredViewsActionServer(object):
         # resize shape and pre-processing
         self._resize_shape = resize_shape
         self._pre_process = pre_process
+
+        # rcm state subscriber
+        self._rcm_state_sub = Subscriber(h_rcm_vs_state, rcm, self._rcm_state_cb)
+        self._rcm_state = rcm()
+        self._rcm_state_dict = {}
+        self._log_df = pd.DataFrame(columns=['id', 'path', 'target_img', 'final_img', 'target_rcm', 'final_rcm'])
+        self._log_idx = 0
 
         # image stream handler
         self._img = np.array([])
@@ -75,6 +86,11 @@ class StoredViewsActionServer(object):
         self._as.start()
 
         self._log_path = log_path
+        if not os.path.exists(self._log_path):
+            os.mkdir(self._log_path)
+
+    def _rcm_state_cb(self, msg: rcm):  # keep updated state
+        self._rcm_state = msg
 
     def _process_endoscopic_image(self, img: np.ndarray, resize_shape: tuple=(480, 640)) -> Tuple[np.ndarray, np.ndarray]:
         r"""Undistorts an endoscopic view, crops, and updates the camera matrix.
@@ -173,7 +189,8 @@ class StoredViewsActionServer(object):
         res.id = Int32(id)
         res.success.data = True
 
-        # TODO: add current tip position
+        # add rcm state to state dict
+        self._rcm_state_dict[id] = self._rcm_state
 
         return res
 
@@ -207,7 +224,7 @@ class StoredViewsActionServer(object):
             G, duv, mean_pairwise_distance, std_pairwise_distance, n_matches = self._hg.desiredHomography(wrp, id=path[checkpoint])
 
             if mean_pairwise_distance is not None:
-                self._error_pub.publish(pairwise_distance(mean_pairwise_distance, std_pairwise_distance, n_matches))
+                self._error_pub.publish(pairwise_distance(Float64(mean_pairwise_distance), Float64(std_pairwise_distance), Int32(n_matches)))
 
                 # publish feedback
                 feedback = h_vsFeedback()
@@ -221,13 +238,17 @@ class StoredViewsActionServer(object):
                     rospy.loginfo('{}: Checkpoint reached. New node: {}. Current mean pairwise distance: {:.1f}'.format(self._action_server, self._hg.ID, mean_pairwise_distance))
                     checkpoint += 1  # update next checkpoint
                     
-                    # TODO: log target and current view, also log current and target pose
-
-
+                    # log target and current view, also log current and target pose
                     target = self._cv_bridge.imgmsg_to_cv2(self._hg.ImgGraph.nodes[self._hg.ID]['data'])
 
-                    cv2.imwrite(target, '{}/img/target_{}.png'.format(self._log_path, self._hg.ID))  # target view
-                    cv2.imwrite(wrp, '{}/img/final_{}.png'.format(self._log_path, self._hg.ID))      # current view is wrp
+                    self._log_df = self._log_df.append({
+                        'id': self._hg.ID,
+                        'path': path,
+                        'target_img': target,
+                        'final_img': wrp,
+                        'target_rcm': self._rcm_state_dict[self._hg.ID],
+                        'final_rcm': self._rcm_state
+                    }, ignore_index=True)
 
                     if checkpoint == len(path):
                         rospy.loginfo('{}: Desired view reached, final mean pairwise distance: {:.1f}'.format(self._action_server, mean_pairwise_distance))
@@ -236,6 +257,12 @@ class StoredViewsActionServer(object):
                         # publish steady state
                         msg = self._build_multiarray(np.eye(3))
                         self._homography_pub.publish(msg)
+
+                        # save results and clear df
+                        self._log_df.to_pickle('{}/path_{}.df'.format(self._log_path, self._log_idx), protocol=2)
+                        self._log_df.drop(self._log_df.index, inplace=True)
+                        self._log_idx += 1
+
                 else:  # execute motion
                     msg = self._build_multiarray(G)
                     self._homography_pub.publish(msg)
