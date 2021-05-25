@@ -243,6 +243,7 @@ class StoredViewsActionServer(object):
 
                     self._log_df = self._log_df.append({
                         'id': self._hg.ID,
+                        'time': rospy.Time.now().to_sec(),
                         'path': path,
                         'target_img': target,
                         'final_img': wrp,
