@@ -30,6 +30,7 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
         G, duv, kp_img, kp_wrp = self._feature_homography(img.astype(np.uint8), wrp.astype(np.uint8), return_kp=True)
         mean_pairwise_distance = None
         std_pairwise_distance = None
+        n_matches = 0
 
         # wrp_pred = cv2.warpPerspective(img, G, (wrp.shape[1], wrp.shape[0]))
         # blend = yt_alpha_blend(wrp_pred, wrp)
@@ -46,5 +47,5 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
             kp_img, kp_wrp = kp_img.reshape(-1, 2), kp_wrp.reshape(-1, 2)
             mean_pairwise_distance = np.linalg.norm(kp_img - kp_wrp, axis=1).mean()
             std_pairwise_distance = np.linalg.norm(kp_img - kp_wrp, axis=1).std()
-            matches = kp_img.shape[0]
-        return G, duv, mean_pairwise_distance, std_pairwise_distance, matches
+            n_matches = kp_img.shape[0]
+        return G, duv, mean_pairwise_distance, std_pairwise_distance, n_matches

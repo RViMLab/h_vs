@@ -271,7 +271,7 @@ class StoredViewsActionServer(object):
                         self._homography_pub.publish(msg)
 
                         # save results and clear df
-                        self._log_df.to_pickle('{}/path_{}.df'.format(self._log_path, self._log_idx), protocol=2)
+                        self._log_df.to_pickle('{}/path_{}.pkl'.format(self._log_path, self._log_idx), protocol=2)
                         self._log_df.drop(self._log_df.index, inplace=True)
                         self._log_idx += 1
 
