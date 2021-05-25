@@ -17,6 +17,7 @@ from cv_bridge import CvBridge
 from homography_generators.base_homography_generator import BaseHomographyGenerator
 import homography_generators.stored_view_homography_generator as svhg
 from homography_generators.endoscopy import endoscopy
+from homography_generators.homography_imitation_learning.utils import yt_alpha_blend
 from h_vs.srv import k_intrinsics, k_intrinsicsRequest, capture, captureRequest, captureResponse
 from h_vs.msg import h_vsAction, h_vsGoal, h_vsFeedback, h_vsResult, pairwise_distance
 from rcm_msgs.msg import rcm
@@ -32,6 +33,7 @@ class StoredViewsActionServer(object):
         img_topic: str='camera/image_raw',
         g_topic: str='visual_servo/G',
         e_topic: str='visual_servo/pairwise_distance',
+        b_topic: str='visual_servo/blend',
         intrinsic_service: str='visual_servo/K',
         cap_service: str='visual_servo/capture',
         action_server: str='visual_servo/execute',
@@ -65,6 +67,10 @@ class StoredViewsActionServer(object):
         self._homography_pub = rospy.Publisher(self._g_topic, Float64MultiArray, queue_size=1)
         self._e_ropic = e_topic
         self._error_pub = rospy.Publisher(self._e_ropic, pairwise_distance, queue_size=1)
+
+        # image blend topic
+        self._b_topic = b_topic
+        self._blend_pub = rospy.Publisher(self._b_topic, Image, queue_size=1)
 
         # create service proxy to update camera intrinsics in h_vs
         self._intrinsic_service = intrinsic_service
@@ -224,6 +230,11 @@ class StoredViewsActionServer(object):
             G, duv, mean_pairwise_distance, std_pairwise_distance, n_matches = self._hg.desiredHomography(wrp, id=path[checkpoint])
 
             if mean_pairwise_distance is not None:
+                # publish blend
+                wrp_est = cv2.warpPerspective(self._cv_bridge.imgmsg_to_cv2(self._hg.ImgGraph.nodes[self._hg.ID]['data']), G, (wrp.shape[1], wrp.shape[0]))
+                blend = yt_alpha_blend(wrp, wrp_est)
+                self._blend_pub.publish(self._cv_bridge.cv2_to_imgmsg((blend*255).astype(np.uint8), 'bgr8'))
+
                 self._error_pub.publish(pairwise_distance(Float64(mean_pairwise_distance), Float64(std_pairwise_distance), Int32(n_matches)))
 
                 # publish feedback
