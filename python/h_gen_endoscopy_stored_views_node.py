@@ -231,8 +231,9 @@ class StoredViewsActionServer(object):
 
             if mean_pairwise_distance is not None:
                 # publish blend
-                wrp_est = cv2.warpPerspective(self._cv_bridge.imgmsg_to_cv2(self._hg.ImgGraph.nodes[self._hg.ID]['data']), G, (wrp.shape[1], wrp.shape[0]))
-                blend = yt_alpha_blend(wrp, wrp_est)
+                target = self._cv_bridge.imgmsg_to_cv2(self._hg.ImgGraph.nodes[path[checkpoint]]['data'])
+                target_est = cv2.warpPerspective(wrp, np.linalg.inv(G), (wrp.shape[1], wrp.shape[0]))
+                blend = yt_alpha_blend(target, target_est)
                 self._blend_pub.publish(self._cv_bridge.cv2_to_imgmsg((blend*255).astype(np.uint8), 'bgr8'))
 
                 self._error_pub.publish(pairwise_distance(Float64(mean_pairwise_distance), Float64(std_pairwise_distance), Int32(n_matches)))
