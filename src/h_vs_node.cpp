@@ -1,4 +1,5 @@
 #include <vector>
+#include <deque>
 #include <Eigen/Core>
 
 #include <ros/ros.h>
@@ -21,6 +22,10 @@ ros::Subscriber G_sub;
 ros::Publisher twist_pub;
 ros::ServiceServer K_serv;
 
+// Buffer for noise removal
+std::deque<Eigen::VectorXd> twist_buffer;
+int twist_buffer_len;
+
 
 // Projective homography callback
 void GCb(const std_msgs::Float64MultiArrayConstPtr G_msg) {
@@ -30,6 +35,17 @@ void GCb(const std_msgs::Float64MultiArrayConstPtr G_msg) {
 
     // Compute feedback
     auto twist = hvs.computeFeedback(G);  // defaults to p_star = principal point
+
+    // Compute moving average
+    twist_buffer.push_back(twist);
+    if (twist_buffer.size() > twist_buffer_len) {
+        twist_buffer.pop_front();
+    }
+
+    twist.setZero();
+    for (auto& twist_i: twist_buffer) {
+        twist += twist_i/twist_buffer.size();
+    }
 
     // Publish linear and angular velocity as twist
     geometry_msgs::Twist twist_msg;
@@ -77,6 +93,7 @@ int main(int argc, char** argv) {
     nh.getParam("h_vs_node/url", url);
     nh.getParam("lambda_v", std_lambda_v);
     nh.getParam("lambda_w", std_lambda_w);
+    nh.getParam("twist_buffer_len", twist_buffer_len);
 
     camera_info_manager::CameraInfoManager camera_info(nh, cname, url);
     auto camera_matrix = camera_info.getCameraInfo().K;
