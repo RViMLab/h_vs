@@ -111,22 +111,29 @@ class StoredViewsActionServer(object):
 
         # Update with current image and compute desired projective homography
         img, K_p = self._hg.undistort(img)
-        mask = endoscopy.bilateralSegmentation(img.astype(np.uint8), th=0.1)
-        center, radius = self._tracker.updateBoundaryCircle(mask)
+        if not self._tracker.initCircle:
+            mask = endoscopy.bilateralSegmentation(img.astype(np.uint8), th=0.1)
+            center, radius = self._tracker.updateBoundaryCircle(mask)
 
-        if radius is None:
-            return np.array([]), np.array([])
-        else:
-            inner_top_left, inner_shape = endoscopy.maxRectangleInCircle(mask.shape, center, radius)
-            inner_top_left, inner_shape = inner_top_left.astype(np.int), tuple(map(np.int, inner_shape))
+            if radius is None:
+                return np.array([]), np.array([])
+            
 
-            img = endoscopy.crop(img, inner_top_left, inner_shape)
+        # # if radius is None:
+        # #     return np.array([]), np.array([])
+        # else:
+        center, radius = self._tracker.circle
 
-            K_pp = endoscopy.updateCroppedPrincipalPoint(inner_top_left, K_p)  # update camera intrinsics under cropping
-            K_pp = endoscopy.updateScaledPrincipalPoint(img.shape, resize_shape, K_p)  # update camera intrinsics under scaling
-            img = cv2.resize(img, (resize_shape[1], resize_shape[0]))
+        inner_top_left, inner_shape = endoscopy.maxRectangleInCircle(img.shape, center, radius)
+        inner_top_left, inner_shape = inner_top_left.astype(np.int), tuple(map(np.int, inner_shape))
 
-            return img, K_pp
+        img = endoscopy.crop(img, inner_top_left, inner_shape)
+
+        K_pp = endoscopy.updateCroppedPrincipalPoint(inner_top_left, K_p)  # update camera intrinsics under cropping
+        K_pp = endoscopy.updateScaledPrincipalPoint(img.shape, resize_shape, K_p)  # update camera intrinsics under scaling
+        img = cv2.resize(img, (resize_shape[1], resize_shape[0]))
+
+        return img, K_pp
 
     def _build_multiarray(self, mat: np.ndarray) -> Float64MultiArray:
         r"""Build multi array from numpy array.
