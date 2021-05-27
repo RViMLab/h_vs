@@ -11,7 +11,7 @@ import actionlib
 import camera_info_manager
 from rospy.topics import Subscriber
 from std_msgs.msg import Int32, Float64, Float64MultiArray, MultiArrayLayout, MultiArrayDimension
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image, CameraInfo, JointState
 from cv_bridge import CvBridge
 
 from homography_generators.base_homography_generator import BaseHomographyGenerator
@@ -26,7 +26,7 @@ from rcm_msgs.msg import rcm
 class StoredViewsActionServer(object):
     def __init__(self,
         hg: BaseHomographyGenerator,
-        mpd_th: int=10,
+        mpd_th: int=1,
         resize_shape: tuple=(240, 320),
         pre_process: bool=True,
         h_rcm_vs_state: str='h_rcm_vs/RCM_ActionServer/state',
@@ -34,6 +34,7 @@ class StoredViewsActionServer(object):
         g_topic: str='visual_servo/G',
         e_topic: str='visual_servo/pairwise_distance',
         b_topic: str='visual_servo/blend',
+        j_topic: str='joint_states',
         intrinsic_service: str='visual_servo/K',
         cap_service: str='visual_servo/capture',
         action_server: str='visual_servo/execute',
@@ -53,7 +54,7 @@ class StoredViewsActionServer(object):
         self._rcm_state_sub = Subscriber(h_rcm_vs_state, rcm, self._rcm_state_cb)
         self._rcm_state = rcm()
         self._rcm_state_dict = {}
-        self._log_df = pd.DataFrame(columns=['id', 'path', 'target_img', 'final_img', 'target_rcm', 'final_rcm'])
+        self._log_df = pd.DataFrame(columns=['id', 'path', 'target_img', 'final_img', 'target_rcm', 'final_rcm', 'target_joint_state', 'final_joint_state'])
         self._log_idx = 0
 
         # image stream handler
@@ -71,6 +72,12 @@ class StoredViewsActionServer(object):
         # image blend topic
         self._b_topic = b_topic
         self._blend_pub = rospy.Publisher(self._b_topic, Image, queue_size=1)
+
+        # joint state topic
+        self._joint_state = JointState()
+        self._joint_state_dict = {}
+        self._j_topic = j_topic
+        self._joint_state_sub = rospy.Subscriber(self._j_topic, JointState, self._joint_state_cb)
 
         # create service proxy to update camera intrinsics in h_vs
         self._intrinsic_service = intrinsic_service
@@ -183,6 +190,11 @@ class StoredViewsActionServer(object):
         else:
             self._img = img
 
+    def _joint_state_cb(self, msg: JointState) -> None:
+        r"""Keep copy of current joint state.
+        """
+        self._joint_state = msg
+
     def _cap_cb(self, req: captureRequest) -> captureResponse:
         r"""Capture callback. Add current image to graph on capture call.
         """
@@ -204,6 +216,9 @@ class StoredViewsActionServer(object):
 
         # add rcm state to state dict
         self._rcm_state_dict[id] = self._rcm_state
+
+        # add joint state to state dict
+        self._joint_state_dict[id] = self._joint_state
 
         return res
 
@@ -257,7 +272,7 @@ class StoredViewsActionServer(object):
                     rospy.loginfo('{}: Checkpoint reached. New node: {}. Current mean pairwise distance: {:.1f}'.format(self._action_server, self._hg.ID, mean_pairwise_distance))
                     checkpoint += 1  # update next checkpoint
                     
-                    # log target and current view, also log current and target pose
+                    # log target and current view, also log current+target pose and joint state
                     target = self._cv_bridge.imgmsg_to_cv2(self._hg.ImgGraph.nodes[self._hg.ID]['data'])
 
                     self._log_df = self._log_df.append({
@@ -267,7 +282,9 @@ class StoredViewsActionServer(object):
                         'target_img': target,
                         'final_img': wrp,
                         'target_rcm': self._rcm_state_dict[self._hg.ID],
-                        'final_rcm': self._rcm_state
+                        'final_rcm': self._rcm_state,
+                        'target_joint_state': self._joint_state_dict[self._hg.ID],
+                        'final_joint_state': self._joint_state
                     }, ignore_index=True)
 
                     if checkpoint == len(path):
