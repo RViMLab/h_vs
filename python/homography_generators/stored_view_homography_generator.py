@@ -27,7 +27,7 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
         img = self._cv_bridge.imgmsg_to_cv2(img)
 
         # compute homography
-        G, duv, kp_img, kp_wrp = self._feature_homography(img.astype(np.uint8), wrp.astype(np.uint8), return_kp=True)
+        G, duv, kp_img, kp_wrp, mask = self._feature_homography(img.astype(np.uint8), wrp.astype(np.uint8), return_kp=True)
         mean_pairwise_distance = None
         std_pairwise_distance = None
         n_matches = 0
@@ -41,10 +41,8 @@ class StoredViewHomographyGenerator(BaseHomographyGenerator):
         if G is None:
             G = np.eye(3)
 
-        # if duv is not None:
-        #     mean_pairwise_distance = np.linalg.norm(duv, axis=1).mean()
         if kp_img is not None and kp_wrp is not None:
-            kp_img, kp_wrp = kp_img.reshape(-1, 2), kp_wrp.reshape(-1, 2)
+            kp_img, kp_wrp = kp_img[mask == 1], kp_wrp[mask == 1]
             mean_pairwise_distance = np.linalg.norm(kp_img - kp_wrp, axis=1).mean()
             std_pairwise_distance = np.linalg.norm(kp_img - kp_wrp, axis=1).std()
             n_matches = kp_img.shape[0]
