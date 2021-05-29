@@ -26,7 +26,8 @@ from rcm_msgs.msg import rcm
 class StoredViewsActionServer(object):
     def __init__(self,
         hg: BaseHomographyGenerator,
-        mpd_th: int=1,
+        mpd_th: int=5,
+        mpd_th_final: int=1.5,
         resize_shape: tuple=(240, 320),
         pre_process: bool=True,
         h_rcm_vs_state: str='h_rcm_vs/RCM_ActionServer/state',
@@ -45,6 +46,7 @@ class StoredViewsActionServer(object):
 
         # convergence threshold
         self._mpd_th = mpd_th
+        self._mpd_th_final = mpd_th_final
 
         # resize shape and pre-processing
         self._resize_shape = resize_shape
@@ -255,7 +257,7 @@ class StoredViewsActionServer(object):
                 # publish blend
                 target = self._cv_bridge.imgmsg_to_cv2(self._hg.ImgGraph.nodes[path[checkpoint]]['data'])
                 target_est = cv2.warpPerspective(wrp, np.linalg.inv(G), (wrp.shape[1], wrp.shape[0]))
-                blend = yt_alpha_blend(target, target_est)
+                blend = yt_alpha_blend(target/255., target_est/255.)
                 self._blend_pub.publish(self._cv_bridge.cv2_to_imgmsg((blend*255).astype(np.uint8), 'bgr8'))
 
                 self._error_pub.publish(pairwise_distance(Float64(mean_pairwise_distance), Float64(std_pairwise_distance), Int32(n_matches)))
@@ -267,7 +269,13 @@ class StoredViewsActionServer(object):
                 feedback.path.data = path
                 self._as.publish_feedback(feedback)
 
-                if mean_pairwise_distance < self._mpd_th:
+
+                if checkpoint >= len(path) - 1:
+                    mpd = self._mpd_th_final
+                else:
+                    mpd = self._mpd_th
+
+                if mean_pairwise_distance < mpd or rospy.is_shutdown():
                     self._hg.ID = path[checkpoint]  # update current node
                     rospy.loginfo('{}: Checkpoint reached. New node: {}. Current mean pairwise distance: {:.1f}'.format(self._action_server, self._hg.ID, mean_pairwise_distance))
                     checkpoint += 1  # update next checkpoint
@@ -287,7 +295,7 @@ class StoredViewsActionServer(object):
                         'final_joint_state': self._joint_state
                     }, ignore_index=True)
 
-                    if checkpoint == len(path):
+                    if checkpoint >= len(path) or rospy.is_shutdown():
                         rospy.loginfo('{}: Desired view reached, final mean pairwise distance: {:.1f}'.format(self._action_server, mean_pairwise_distance))
                         reached = True
 
