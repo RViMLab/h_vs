@@ -2,7 +2,7 @@
 
 
 Homography2DVisualServo::Homography2DVisualServo(Eigen::Matrix3d& K, Eigen::Vector3d& lambda_v, Eigen::Vector3d& lambda_w)
-    : _K(K), _lambda_v(lambda_v), _lambda_w(lambda_w) {   };
+    : _K(K), _lambda_v(lambda_v), _lambda_w(lambda_w) {   }
 
 
 // eq. 15 and 16, see paper
