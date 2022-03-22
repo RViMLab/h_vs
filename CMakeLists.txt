@@ -1,74 +1,80 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.5)
 project(h_vs)
 
-# Catkin packages
-find_package(catkin REQUIRED COMPONENTS
-    roscpp
-    camera_info_manager
-    rospy
-    camera_info_manager_py
-    actionlib
-    std_msgs
-    sensor_msgs
-    geometry_msgs
-    eigen_conversions
-    message_generation
+# Default to C99
+if(NOT CMAKE_C_STANDARD)
+  set(CMAKE_C_STANDARD 99)
+endif()
+
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs)
+find_package(geometry_msgs)
+find_package(camera_info_manager)
+find_package(eigen3_cmake_module REQUIRED)
+find_package(Eigen3)
+
+# add h_vs library
+add_library(${PROJECT_NAME}
+  src/${PROJECT_NAME}.cpp
 )
 
-# Other packages
-find_package(Eigen3 REQUIRED)
-
-# Generate services in the 'srv' folder and actions in 'action' folder
-add_action_files(
-    FILES h_vs.action
+target_include_directories(${PROJECT_NAME}
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
 )
 
-add_service_files(
-  FILES capture.srv k_intrinsics.srv # http://wiki.ros.org/catkin/CMakeLists.txt#msgs_srvs_actions, properly add messages, actions, services -> update rcm_msgs with exported targets
+# add h_vs_node executable
+add_executable(${PROJECT_NAME}_node
+  src/${PROJECT_NAME}_node.cpp
 )
 
-add_message_files(
-  FILES pairwise_distance.msg
+target_link_libraries(${PROJECT_NAME}_node
+  ${PROJECT_NAME}
 )
 
-# Generate added messages and services with any dependencies listed here
-generate_messages(
-  DEPENDENCIES std_msgs sensor_msgs actionlib_msgs
+ament_target_dependencies(${PROJECT_NAME}_node
+  rclcpp std_msgs geometry_msgs camera_info_manager
 )
 
-catkin_package(
-    CATKIN_DEPENDS roscpp camera_info_manager rospy camera_info_manager_py std_msgs geometry_msgs eigen_conversions message_runtime
-    INCLUDE_DIRS include ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS}
-    DEPENDS EIGEN3
-)
-
-# Includes
-include_directories(
-    include
-    ${catkin_INCLUDE_DIRS}
-    ${EIGEN3_INCLUDE_DIRS}
-)
-
-# Library
-add_library(h_vs src/homography_2d_vs.cpp)
-
-# Executable
-add_executable(h_vs_node src/h_vs_node.cpp)
-add_dependencies(h_vs_node ${${PROJECT_NAME}_EXPORTED_TARGETS})
-target_link_libraries(h_vs_node ${catkin_LIBRARIES} h_vs)
-
-# Install
+# install libarry and executable
 install(
-    DIRECTORY include/h_vs/
-    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+  DIRECTORY include/
+  DESTINATION include
 )
 
 install(
-    TARGETS h_vs_node
-    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+  TARGETS ${PROJECT_NAME}
+  EXPORT ${PROJECT_NAME}Targets
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  INCLUDES DESTINATION include
 )
 
-catkin_install_python(
-  PROGRAMS python/control_gallery_node.py python/h_gen_calibration_pattern_node.py python/h_gen_endoscopy_calibration_pattern_node.py python/h_gen_node.py
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+install(
+  TARGETS ${PROJECT_NAME}_node
+  DESTINATION lib/${PROJECT_NAME}
 )
+
+# install launch files
+install(
+  DIRECTORY config launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
+# ament export
+ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
+ament_export_dependencies(eigen3_cmake_module Eigen3)
+
+ament_package()

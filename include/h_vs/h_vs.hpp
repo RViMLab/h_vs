@@ -3,7 +3,7 @@
 #include <Eigen/Core>
 #include <Eigen/LU>
 
-class Homography2DVisualServo {
+class HVs {
 
     public:
 
@@ -15,8 +15,8 @@ class Homography2DVisualServo {
          * @param lambda_v velocity gain, see eq. 20 paper (Eigen::Vector3d)
          * @param lambda_w velocity gain, see eq. 20 paper (Eigen::Vector3d)
         **/
-        Homography2DVisualServo(Eigen::Matrix3d& K, Eigen::Vector3d& lambda_v, Eigen::Vector3d& lambda_w);
-        Homography2DVisualServo() = default;
+        HVs(Eigen::Matrix3d& K, Eigen::Vector3d& lambda_v, Eigen::Vector3d& lambda_w);
+        HVs() = default;
 
         /**
          * @brief eq. 15 and 16, see paper

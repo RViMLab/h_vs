@@ -1,0 +1,8 @@
+h_vs_node:
+  ros__parameters:
+    # linear and angular velocity gains, eq. 20, paper
+    lambda_v: [0.5, 0.5, 0.5]
+    lambda_w: [0.5, 0.5, 0.5]
+
+    # twist buffer for moving average
+    twist_buffer_len: 20

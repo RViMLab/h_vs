@@ -1,12 +1,12 @@
-#include <h_vs/homography_2d_vs.h>
+#include <h_vs/h_vs.hpp>
 
 
-Homography2DVisualServo::Homography2DVisualServo(Eigen::Matrix3d& K, Eigen::Vector3d& lambda_v, Eigen::Vector3d& lambda_w)
+HVs::HVs(Eigen::Matrix3d& K, Eigen::Vector3d& lambda_v, Eigen::Vector3d& lambda_w)
     : _K(K), _lambda_v(lambda_v), _lambda_w(lambda_w) {   }
 
 
 // eq. 15 and 16, see paper
-Eigen::VectorXd Homography2DVisualServo::computeFeedback(Eigen::Matrix3d& G, Eigen::Vector3d& p_star) {
+Eigen::VectorXd HVs::computeFeedback(Eigen::Matrix3d& G, Eigen::Vector3d& p_star) {
 
     Eigen::Matrix3d H = _K.inverse()*G*_K;
     Eigen::Vector3d m_star = _K.inverse()*p_star;
@@ -19,7 +19,7 @@ Eigen::VectorXd Homography2DVisualServo::computeFeedback(Eigen::Matrix3d& G, Eig
 
 
 // eq. 15 and 16, see paper
-Eigen::VectorXd Homography2DVisualServo::computeFeedback(Eigen::Matrix3d& G) {
+Eigen::VectorXd HVs::computeFeedback(Eigen::Matrix3d& G) {
 
     Eigen::Vector3d p_star(_K(0,2), _K(1,2), 1.);  // principal point per default
 
@@ -35,13 +35,13 @@ Eigen::VectorXd Homography2DVisualServo::computeFeedback(Eigen::Matrix3d& G) {
 
 
 // eq. 15, see paper
-Eigen::Vector3d Homography2DVisualServo::_computeEv(Eigen::Matrix3d& H, Eigen::Vector3d& m_star) {
+Eigen::Vector3d HVs::_computeEv(Eigen::Matrix3d& H, Eigen::Vector3d& m_star) {
     return (H - Eigen::Matrix3d::Identity())*m_star;
 }
 
 
 // eq. 16, see paper
-Eigen::Vector3d Homography2DVisualServo::_computeEw(Eigen::Matrix3d& H) {
+Eigen::Vector3d HVs::_computeEw(Eigen::Matrix3d& H) {
 
     auto H_skew = H - H.transpose();
 

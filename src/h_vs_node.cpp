@@ -1,126 +1,107 @@
-#include <vector>
 #include <deque>
+#include <memory>
+#include <string>
+#include <functional>
 #include <Eigen/Core>
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <camera_info_manager/camera_info_manager.hpp>
+#include <h_vs/h_vs.hpp>
 
-#include <ros/ros.h>
-#include <camera_info_manager/camera_info_manager.h>
-#include <std_msgs/Float64MultiArray.h>
-#include <geometry_msgs/Twist.h>
-#include <eigen_conversions/eigen_msg.h>
 
-#include <h_vs/homography_2d_vs.h>
-#include <h_vs/k_intrinsics.h>
-
-// Typedefs
 using RowMajorMatrix3d = Eigen::Matrix<double, 3, 3, Eigen::RowMajor>;
 
 
-// Forward declarations
-Homography2DVisualServo hvs;
+class HVsNode : public rclcpp::Node {
+    public:
+        HVsNode(std::string node_name = "h_vs_node") : Node(node_name) {
+            this->declare_parameter("lambda_v");  // https://docs.ros.org/en/foxy/Tutorials/Using-Parameters-In-A-Class-CPP.html
+            this->declare_parameter("lambda_w");
+            this->declare_parameter("twist_buffer_len");
+            this->declare_parameter("cname");
+            this->declare_parameter("url");
 
-ros::Subscriber G_sub;
-ros::Publisher twist_pub;
-ros::ServiceServer K_serv;
+            std::vector<double> lambda_v, lambda_w;
 
-// Buffer for noise removal
-std::deque<Eigen::VectorXd> twist_buffer;
-int twist_buffer_len;
+            if (!get_parameter("lambda_v", lambda_v)) { std::string error = "Failed to receive gain parameter 'lambda_v'."; RCLCPP_ERROR(get_logger(), error); throw std::runtime_error(error); };
+            if (!get_parameter("lambda_w", lambda_w)) { std::string error = "Failed to receive gain parameter 'lambda_w'."; RCLCPP_ERROR(get_logger(), error); throw std::runtime_error(error); };
+            if (!get_parameter("twist_buffer_len", twist_buffer_len_)) { std::string error = "Failed to receive parameters 'twist_buffer_len'."; RCLCPP_ERROR(get_logger(), error); throw std::runtime_error(error); };
+            if (!get_parameter("cname", cname_)) { RCLCPP_WARN(get_logger(), "Failed to receive parameter 'cname', defaulting to 'camera'."); cname_ = "camera"; };
+            if (!get_parameter("url", url_)) { RCLCPP_WARN(get_logger(), "Failed to receive parameter 'url', defaulting to ''."); url_ = ""; };
 
+            camera_info_manager_ = std::make_unique<camera_info_manager::CameraInfoManager>(this, cname_, url_);
+            auto K = camera_info_manager_->getCameraInfo().k;
 
-// Projective homography callback
-void GCb(const std_msgs::Float64MultiArrayConstPtr G_msg) {
+            // Map parameters to eigen types
+            lambda_v_ = Eigen::Vector3d::Map(lambda_v.data());
+            lambda_w_ = Eigen::Vector3d::Map(lambda_w.data());
+            K_ = Eigen::Map<const RowMajorMatrix3d>(K.data());
 
-    // G to eigen via mapping
-    Eigen::Matrix3d G = Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>>(G_msg->data.data());
+            // Initialize homography-based visual servo
+            h_vs_ = std::make_unique<HVs>(K_, lambda_v_, lambda_w_);
 
-    // Compute feedback
-    auto twist = hvs.computeFeedback(G);  // defaults to p_star = principal point
+            G_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
+                "~/G",
+                rclcpp::SystemDefaultsQoS(),
+                std::bind(&HVsNode::GCb, this, std::placeholders::_1)    
+            );
 
-    // Compute moving average
-    twist_buffer.push_back(twist);
-    if (twist_buffer.size() > twist_buffer_len) {
-        twist_buffer.pop_front();
-    }
-
-    twist.setZero();
-    for (auto& twist_i: twist_buffer) {
-        twist += twist_i/twist_buffer.size();
-    }
-
-    // Publish linear and angular velocity as twist
-    geometry_msgs::Twist twist_msg;
-    tf::twistEigenToMsg(twist, twist_msg);
-
-    twist_pub.publish(twist_msg);
-};
-
-
-// Camera intrinsic service callback
-bool KCb(h_vs::k_intrinsicsRequest& request, h_vs::k_intrinsicsResponse& response) {
-
-    for (auto& dim : request.K.layout.dim) {
-        if (dim.size != 3) {
-            ROS_ERROR("Received camera intrinsics of wrong dimension %d for axis %s", dim.size, dim.label.c_str());
-            return false;
+            twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
+                "~/twist",
+                rclcpp::SystemDefaultsQoS()
+            );
         }
-    }
 
-    // K to Eigen via mapping
-    Eigen::Matrix3d K = Eigen::Map<const RowMajorMatrix3d>(request.K.data.data());
+    private:
+        std::unique_ptr<HVs> h_vs_;
+        Eigen::Matrix3d K_;
+        Eigen::Vector3d lambda_v_, lambda_w_;
 
-    // Set
-    hvs.K(K);
+        std::string cname_, url_;
+        std::unique_ptr<camera_info_manager::CameraInfoManager> camera_info_manager_;
 
-    // Generate response
-    response.K.layout = request.K.layout;
-    response.K.data.resize(K.size());
-    Eigen::Map<RowMajorMatrix3d>(response.K.data.data()) = hvs.K();
+        rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr G_sub_;  // projective homography G ~ KHK^(-1), with H Euclidean homography
+        rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_pub_;
+        // rclcpp::Client< ??
 
-    return true;
+        std::deque<Eigen::VectorXd> twist_buffer_;
+        std::size_t twist_buffer_len_;
+
+        void GCb(const std_msgs::msg::Float64MultiArray::SharedPtr G_msg) {
+            // G_msg to eigen via mapping
+            Eigen::Matrix3d G = Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>>(G_msg->data.data());
+            
+            // Compute feedback
+            auto twist = h_vs_->computeFeedback(G);
+
+            // Compute moving average
+            twist_buffer_.push_back(twist);
+            if (twist_buffer_.size() > twist_buffer_len_) {
+                twist_buffer_.pop_front();
+            }
+
+            twist.setZero();
+            for (auto& twist_i: twist_buffer_) {
+                twist += twist_i/twist_buffer_.size();
+            }
+
+            // Publish twist
+            geometry_msgs::msg::Twist twist_msg;
+            twist_msg.linear.x = twist[0];
+            twist_msg.linear.y = twist[1];
+            twist_msg.linear.z = twist[2];
+            twist_msg.angular.x = twist[3];
+            twist_msg.angular.y = twist[4];
+            twist_msg.angular.z = twist[5];
+            twist_pub_->publish(twist_msg);
+        };
 };
 
 
 int main(int argc, char** argv) {
-
-    ros::init(argc, argv, "h_vs_node");
-    auto nh = ros::NodeHandle();
-
-    // Read parameters
-    std::string cname, url;
-    std::vector<double> std_lambda_v, std_lambda_w;
-
-    nh.getParam("h_vs_node/cname", cname);
-    nh.getParam("h_vs_node/url", url);
-    nh.getParam("lambda_v", std_lambda_v);
-    nh.getParam("lambda_w", std_lambda_w);
-    nh.getParam("twist_buffer_len", twist_buffer_len);
-
-    camera_info_manager::CameraInfoManager camera_info(nh, cname, url);
-    auto camera_matrix = camera_info.getCameraInfo().K;
-
-    // Map parameters to eigen types
-    Eigen::Vector3d lambda_v = Eigen::Vector3d::Map(std_lambda_v.data());
-    Eigen::Vector3d lambda_w = Eigen::Vector3d::Map(std_lambda_w.data());
-    Eigen::Matrix3d K = Eigen::Map<RowMajorMatrix3d>(camera_matrix.data());
-
-    // Initialize visual servo
-    hvs = Homography2DVisualServo(
-        K, 
-        lambda_v, 
-        lambda_w
-    );
-
-    // Subscribe to projective homography and publish desired linear and angular velocity
-    G_sub = nh.subscribe<std_msgs::Float64MultiArray>("visual_servo/G", 1, GCb);
-    twist_pub = nh.advertise<geometry_msgs::Twist>("visual_servo/twist", 1);
-
-    // Service to set camera intrinsic
-    K_serv = nh.advertiseService("visual_servo/K", KCb);
-
-    ros::spin();
-
-    G_sub.shutdown();
-    twist_pub.shutdown();
-
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<HVsNode>());
+    rclcpp::shutdown();
     return 0;
-};
+}
