@@ -35,6 +35,10 @@ target_include_directories(${PROJECT_NAME}
     $<INSTALL_INTERFACE:include>
 )
 
+ament_target_dependencies(${PROJECT_NAME}
+  Eigen3
+)
+
 # add h_vs_node executable
 add_executable(${PROJECT_NAME}_node
   src/${PROJECT_NAME}_node.cpp
