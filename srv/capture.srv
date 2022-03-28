@@ -1,4 +1,0 @@
----
-sensor_msgs/Image capture
-std_msgs/Int32 id
-std_msgs/Bool success

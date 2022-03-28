@@ -1,3 +1,0 @@
-std_msgs/Float64 mean_pairwise_distance
-std_msgs/Float64 std_pairwise_distance
-std_msgs/Int32 n_matches
