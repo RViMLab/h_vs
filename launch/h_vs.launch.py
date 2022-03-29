@@ -11,6 +11,7 @@ def launch_setup(context, *args, **kwargs):
         LaunchConfiguration("h_vs_params")
     ])
 
+    # homography to end effector twist node
     h_vs = Node(
         package="h_vs",
         executable="h_vs_node",
@@ -18,10 +19,30 @@ def launch_setup(context, *args, **kwargs):
             h_vs_params, {
                 "url": "file://" + LaunchConfiguration("url").perform(context), 
                 "cname": LaunchConfiguration("cname")
-            }]
+            }],
+        remappings=[
+            ("h_vs_node/G", "h_gen_node/G")
+        ]
     )
 
-    return [h_vs]
+    # homography generation node
+    h_gen_node = Node(
+        package="h_vs",
+        executable="h_gen_node.py",
+        remappings=[
+            ("h_gen_node/image_raw", PathJoinSubstitution([
+                LaunchConfiguration("cname"), "image_raw"
+            ])),
+            ("h_gen_node/camera_info", PathJoinSubstitution([
+                LaunchConfiguration("cname"), "camera_info"
+            ]))
+        ]
+    )
+
+    return [
+        h_vs,
+        h_gen_node
+    ]
 
 def generate_launch_description():
     launch_args = []

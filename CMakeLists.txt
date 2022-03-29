@@ -39,6 +39,9 @@ ament_target_dependencies(${PROJECT_NAME}
   Eigen3
 )
 
+# add homography_generators module
+ament_python_install_package(homography_generators)
+
 # add h_vs_node executable
 add_executable(${PROJECT_NAME}_node
   src/${PROJECT_NAME}_node.cpp
@@ -50,6 +53,11 @@ target_link_libraries(${PROJECT_NAME}_node
 
 ament_target_dependencies(${PROJECT_NAME}_node
   rclcpp std_msgs geometry_msgs camera_info_manager
+)
+
+# add h_gen_node
+install(PROGRAMS
+  scripts/h_gen_node.py DESTINATION lib/${PROJECT_NAME}
 )
 
 # install libarry and executable
