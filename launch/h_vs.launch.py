@@ -31,10 +31,10 @@ def launch_setup(context, *args, **kwargs):
         executable="h_gen_node.py",
         remappings=[
             ("h_gen_node/image_raw", PathJoinSubstitution([
-                LaunchConfiguration("cname"), "image_raw"
+                LaunchConfiguration("cname"), "image_raw/crop"
             ])),
             ("h_gen_node/camera_info", PathJoinSubstitution([
-                LaunchConfiguration("cname"), "camera_info"
+                LaunchConfiguration("cname"), "camera_info/crop"
             ]))
         ]
     )
