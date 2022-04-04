@@ -21,7 +21,11 @@ def launch_setup(context, *args, **kwargs):
                 "cname": LaunchConfiguration("cname")
             }],
         remappings=[
-            ("h_vs_node/G", "h_gen_node/G")
+            ("h_vs_node/G", "h_gen_node/G"),
+            ("h_vs_node/twist", PathJoinSubstitution([
+                LaunchConfiguration("controller"),
+                "twist"
+            ]))
         ]
     )
 
@@ -71,7 +75,15 @@ def generate_launch_description():
         ]),
         description="Absolut path to camera calibration file."
     ))
-    
+
+    launch_args.append(
+        DeclareLaunchArgument(
+            name="controller",
+            default_value="collaborative_twist_position_controller",
+            description="Robot controller, used for remapping h_vs_node/twist to controller/twist."
+        )
+    )
+
     return LaunchDescription(
         launch_args + [
             OpaqueFunction(function=launch_setup)
