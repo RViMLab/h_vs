@@ -33,7 +33,7 @@ class HGenNode(Node):
         self.img_sub_ = self.create_subscription(Image, "~/image_raw", self.imgCb_, rclpy.qos.qos_profile_system_default)
         self.hom_pub_ = self.create_publisher(Float64MultiArray, "~/G", rclpy.qos.qos_profile_system_default)
         self.wrench_sub_ = self.create_subscription(Wrench, "~/wrench", self.wrenchCb, rclpy.qos.qos_profile_system_default)
-        self.class_prob_pub_ = self.create_publisher(Float64MultiArray, "~/class_probability", rclpy.qos.qos_profile_system_default)
+        self.class_prob_pub_ = self.create_publisher(Float64MultiArray, "~/class_probabilities", rclpy.qos.qos_profile_system_default)
         self.bridge_ = cv_bridge.CvBridge()
         self.circle_ = BoundingCircleDetector(model=MODEL.SEGMENTATION.UNET_RESNET_34, device="cuda")
         self.h_est_ = HomographyEstimator(model=MODEL.HOMOGRAPHY_ESTIMATION.RESNET_34, device="cuda")
@@ -76,7 +76,7 @@ class HGenNode(Node):
             class_prob = Float64MultiArray(
                 layout=MultiArrayLayout(
                     dim=[
-                        MultiArrayDimension(label="class_probability", size=2)
+                        MultiArrayDimension(label="class_probabilities", size=2)
                     ],
                     data_offset=0
                 ),

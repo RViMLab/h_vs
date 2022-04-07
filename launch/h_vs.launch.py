@@ -44,9 +44,9 @@ def launch_setup(context, *args, **kwargs):
                 LaunchConfiguration("controller"),
                 "wrench"
             ])),
-            ("h_gen_node/class_probability", PathJoinSubstitution([
+            ("h_gen_node/class_probabilities", PathJoinSubstitution([
                 LaunchConfiguration("controller"),
-                "class_probability"
+                "class_probabilities"
             ]))
         ]
     )
