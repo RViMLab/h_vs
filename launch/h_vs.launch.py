@@ -39,6 +39,14 @@ def launch_setup(context, *args, **kwargs):
             ])),
             ("h_gen_node/camera_info", PathJoinSubstitution([
                 LaunchConfiguration("cname"), "camera_info/crop"
+            ])),
+            ("h_gen_node/wrench", PathJoinSubstitution([
+                LaunchConfiguration("controller"),
+                "wrench"
+            ])),
+            ("h_gen_node/class_probability", PathJoinSubstitution([
+                LaunchConfiguration("controller"),
+                "class_probability"
             ]))
         ]
     )
