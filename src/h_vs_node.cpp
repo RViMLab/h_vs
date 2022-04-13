@@ -47,6 +47,14 @@ class HVsNode : public rclcpp::Node {
                 std::bind(&HVsNode::GCb, this, std::placeholders::_1)    
             );
 
+            K_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
+                "~/K",
+                rclcpp::SystemDefaultsQoS(), [this](const std_msgs::msg::Float64MultiArray::SharedPtr K_msg) {
+                    Eigen::Matrix3d K = Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>>(K_msg->data.data());
+                    this->h_vs_->K(K);
+                }
+            );
+
             twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
                 "~/twist",
                 rclcpp::SystemDefaultsQoS()
@@ -62,6 +70,7 @@ class HVsNode : public rclcpp::Node {
         std::unique_ptr<camera_info_manager::CameraInfoManager> camera_info_manager_;
 
         rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr G_sub_;  // projective homography G ~ KHK^(-1), with H Euclidean homography
+        rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr K_sub_;  // camera intrinsics
         rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_pub_;
         // rclcpp::Client< ??
 

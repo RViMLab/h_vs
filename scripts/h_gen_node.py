@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 import rclpy
 import cv_bridge
+import torch
+from typing import List
 from kornia import image_to_tensor, tensor_to_image
 from kornia.geometry import crop_and_resize, warp_perspective
 from rclpy.node import Node
@@ -15,77 +17,137 @@ from endoscopy import BoundingCircleDetector, HomographyEstimator
 from endoscopy.utils import MODEL, max_rectangle_in_circle, yt_alpha_blend
 
 from homography_generators import BaseHomographyGenerator
-from homography_generators.utils.conversions import homographyToMsg
+from homography_generators.utils.conversions import mat3DToMsg, updateCroppedPrincipalPoint, updateScaledPrincipalPoint
+from homography_generators.utils.feature_homography import FeatureHomographyEstimation
 
 
 class HGenNode(Node):
     inf_sub_: rclpy.subscription.Subscription
     img_sub_: rclpy.subscription.Subscription
     hom_pub_: rclpy.publisher.Publisher
+    k_pub_: rclpy.publisher.Publisher
     wrench_sub_: rclpy.subscription.Subscription
     class_prob_pub_: rclpy.publisher.Publisher
     bridge_: cv_bridge.CvBridge
     circle_: BoundingCircleDetector
+    center_buffer_: List[torch.Tensor]
+    radius_buffer_: List[torch.Tensor]
+    buffer_len_: int
+    cam_info_: CameraInfo
 
     def __init__(self, node_name: str="h_gen_node"):
         super().__init__(node_name=node_name)
         self.inf_sub_ = self.create_subscription(CameraInfo, "~/camera_info", self.infCb_, rclpy.qos.qos_profile_system_default)  # launch in node namespace ~/*
         self.img_sub_ = self.create_subscription(Image, "~/image_raw", self.imgCb_, rclpy.qos.qos_profile_system_default)
         self.hom_pub_ = self.create_publisher(Float64MultiArray, "~/G", rclpy.qos.qos_profile_system_default)
+        self.k_pub_ = self.create_publisher(Float64MultiArray, "~/K", rclpy.qos.qos_profile_system_default)
         self.wrench_sub_ = self.create_subscription(Wrench, "~/wrench", self.wrenchCb, rclpy.qos.qos_profile_system_default)
         self.class_prob_pub_ = self.create_publisher(Float64MultiArray, "~/class_probabilities", rclpy.qos.qos_profile_system_default)
         self.bridge_ = cv_bridge.CvBridge()
         self.circle_ = BoundingCircleDetector(model=MODEL.SEGMENTATION.UNET_RESNET_34, device="cuda")
         self.h_est_ = HomographyEstimator(model=MODEL.HOMOGRAPHY_ESTIMATION.RESNET_34, device="cuda")
+        self.fd_ = cv2.ORB_create()
+        self.fh_est_ = FeatureHomographyEstimation(self.fd_)
         self.get_logger().info("loaded model")
+
+        self.center_buffer_ = []
+        self.radius_buffer_ = []
+        self.buffer_len_ = 40
+
+        self.cam_info_ = CameraInfo()
+
+        self.init_ = False
 
         self.prev_crp_ = None
 
     def infCb_(self, msg: CameraInfo) -> None:
-        # self.get_logger().info("Got height {}".format(msg.height))
-        return
+        self.cam_info_ = msg
 
     def wrenchCb(self, msg: Wrench) -> None:
         return
 
     def imgCb_(self, msg: Image) -> None:
+        K = self.cam_info_.k.reshape([3, 3])
+        d = np.array(self.cam_info_.d.tolist())
+        shape = [self.cam_info_.height, self.cam_info_.width]
+
         img = self.bridge_.imgmsg_to_cv2(msg, "bgr8")
+
+        # ideally: undistort image, and update camera matrix
+        h, w = img.shape[:2]
+        K, roi = cv2.getOptimalNewCameraMatrix(self.cam_info_.k.reshape([3, 3]), d, (w,h), 1, (w,h))  # alpha set to 1.
+
+        img = cv2.undistort(img, self.cam_info_.k.reshape([3, 3]), d, None, K)
+
         scale = .25
+        resize_shape = [240, 320]
         img = cv2.resize(img, (int(img.shape[1]*scale), int(img.shape[0]*scale)))
 
         img = image_to_tensor(img, False).float()/255.
         try:
             center, radius = self.circle_(img, N=100, reduction=None)
-            box = max_rectangle_in_circle(img.shape, center, radius)
-            crp = crop_and_resize(img, box, [320, 320])
+            if len(self.center_buffer_) >= self.buffer_len_:
+                self.center_buffer_.pop(0)
+                self.radius_buffer_.pop(0)
+
+            # compute running average on center and radius
+            self.center_buffer_.append(center)
+            self.radius_buffer_.append(radius)
+            center = torch.concat(self.center_buffer_).mean(axis=0).unsqueeze(0)
+            radius = torch.concat(self.radius_buffer_).mean(axis=0).unsqueeze(0)
+            box = max_rectangle_in_circle(img.shape, center, radius)  # shape: Bx4x2
+
+            # update camera intrinsics in h_vs_node based on crop
+            Kp = updateScaledPrincipalPoint(shape, resize_shape, updateCroppedPrincipalPoint(box[0, 0].cpu().numpy(), K))
+            self.k_pub_.publish(mat3DToMsg(Kp))
+
+            # publish updated camera matrix
+
+
+
+            crp = crop_and_resize(img, box, resize_shape)
+
+            # to image
+            # crp = (tensor_to_image(crp.cpu(), keepdim=False)*255.).astype(np.uint8)
         except Exception as e:
             self.get_logger().warn(e)
             return
 
         if self.prev_crp_ is not None:
-            G, duv = self.h_est_(crp, self.prev_crp_)
-            blend = yt_alpha_blend(self.prev_crp_, warp_perspective(crp, G.inverse(), crp.shape[-2:]))
+            G, duv = self.h_est_(self.prev_crp_, crp)
+            # G, duv = self.fh_est_ (self.prev_crp_, crp)
+            blend = yt_alpha_blend(self.prev_crp_, warp_perspective(crp, G, crp.shape[-2:]))
+            # blend = yt_alpha_blend(self.prev_crp_.astype(float)/255., cv2.warpPerspective(crp.astype(float)/255., np.linalg.inv(G), (crp.shape[1], crp.shape[0])))
             blend = tensor_to_image(blend.cpu(), keepdim=False)
             cv2.imshow("blend", blend)
 
             # publish as numpy array
             G = G.squeeze().numpy()
-            self.hom_pub_.publish(homographyToMsg(G))
+            self.hom_pub_.publish(mat3DToMsg(np.linalg.inv(G)))  # inverse!!
 
             # class probability
             class_prob = Float64MultiArray(
                 layout=MultiArrayLayout(
                     dim=[
-                        MultiArrayDimension(label="class_probabilities", size=2)
+                        MultiArrayDimension(label="class_probabilities", size=4)
                     ],
                     data_offset=0
                 ),
-                data=[1., 0.]
+                data=[0., 0., 1., 0.]
             )
 
             self.class_prob_pub_.publish(class_prob)
-            
-        self.prev_crp_ = crp
+
+
+
+        # set weights/cases
+        # run visual servo, based on target image
+        # record
+        
+        
+        if not self.init_:
+            self.init_ = True
+            self.prev_crp_ = crp
 
         img = tensor_to_image(img, False)
         # crp = tensor_to_image(crp, False)
