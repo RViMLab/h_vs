@@ -79,7 +79,7 @@ class HGenNode(Node):
 
         img = cv2.undistort(img, self.cam_info_.k.reshape([3, 3]), d, None, K)
 
-        scale = .25
+        scale = 1.
         resize_shape = [240, 320]
         img = cv2.resize(img, (int(img.shape[1]*scale), int(img.shape[0]*scale)))
 
