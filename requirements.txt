@@ -1,2 +1,3 @@
 endoscopy>=0.1.3
 opencv-python
+networkx
