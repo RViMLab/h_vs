@@ -21,8 +21,8 @@ def launch_setup(context, *args, **kwargs):
                 "cname": LaunchConfiguration("cname")
             }],
         remappings=[
-            ("h_vs_node/G", "h_gen_node/G"),
-            ("h_vs_node/K", "h_gen_node/K"),
+            ("h_vs_node/G", "h_gen_data_collect_node/G"),
+            ("h_vs_node/K", "h_gen_data_collect_node/K"),
             ("h_vs_node/twist", PathJoinSubstitution([
                 LaunchConfiguration("controller"),
                 "twist"

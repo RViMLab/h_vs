@@ -1,8 +1,10 @@
 #!/usr/bin/python3
 
+import os
 import cv2
 import numpy as np
 import rclpy
+import time
 import cv_bridge
 import torch
 from typing import List
@@ -10,7 +12,7 @@ import kornia
 from kornia import image_to_tensor, tensor_to_image
 from kornia.geometry import crop_and_resize, warp_perspective
 from rclpy.node import Node
-from std_msgs.msg import MultiArrayLayout, MultiArrayDimension, Float64MultiArray
+from std_msgs.msg import MultiArrayLayout, MultiArrayDimension, Float64MultiArray, Int8
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import Wrench
 
@@ -31,6 +33,7 @@ class HGenDataCollectNode(Node):
     k_pub_: rclpy.publisher.Publisher
     wrench_sub_: rclpy.subscription.Subscription
     class_prob_pub_: rclpy.publisher.Publisher
+    phase_pub_: rclpy.subscription.Subscription
     bridge_: cv_bridge.CvBridge
     circle_: BoundingCircleDetector
     center_buffer_: List[torch.Tensor]
@@ -39,7 +42,7 @@ class HGenDataCollectNode(Node):
     cam_info_: CameraInfo
     window_: tk.Tk
 
-    def __init__(self, node_name: str="h_gen_node"):
+    def __init__(self, node_name: str="h_gen_data_collect_node"):
         super().__init__(node_name=node_name)
         self.device_ = "cuda"
         self.inf_sub_ = self.create_subscription(CameraInfo, "~/camera_info", self.infCb_, rclpy.qos.qos_profile_system_default)  # launch in node namespace ~/*
@@ -48,6 +51,7 @@ class HGenDataCollectNode(Node):
         self.k_pub_ = self.create_publisher(Float64MultiArray, "~/K", rclpy.qos.qos_profile_system_default)
         self.wrench_sub_ = self.create_subscription(Wrench, "~/wrench", self.wrenchCb, rclpy.qos.qos_profile_system_default)
         self.class_prob_pub_ = self.create_publisher(Float64MultiArray, "~/class_probabilities", rclpy.qos.qos_profile_system_default)
+        self.phase_pub_ = self.create_publisher(Int8, "~/phase", rclpy.qos.qos_profile_system_default)
         self.bridge_ = cv_bridge.CvBridge()
         self.circle_ = BoundingCircleDetector(model=MODEL.SEGMENTATION.UNET_RESNET_34, device=self.device_)
 
@@ -63,7 +67,18 @@ class HGenDataCollectNode(Node):
 
         self.init_ = False
 
+        self.target_view_ = None
         self.prev_crp_ = None
+
+        self.class_prob_ = Float64MultiArray(
+            layout=MultiArrayLayout(
+                dim=[
+                    MultiArrayDimension(label="class_probabilities", size=4)
+                ],
+                data_offset=0
+            ),
+            data=[1., 1., 0., 0.]
+        )
 
         # which model to use
         self.deep_hom_ = False
@@ -85,20 +100,71 @@ class HGenDataCollectNode(Node):
         if self.regi_:
             self.registrator_ = kornia.geometry.ImageRegistrator('similarity', num_iterations=1)
 
+        # collect data
+        self.output_path_ = "/tmp/data" #self.get_parameter()
+        self.phase_ = 0  # 0: hand guide, 1: visual servo, 2: select view
 
         # create gui
-        # self.window_.
+        self.hand_guide_button_ = tk.Button(
+            self.window_, text="Hand-guide", command=self.handGuideCb
+        ).pack()
+        
+        self.visual_servo_button = tk.Button(
+            self.window_, text="Visual servo", command=self.visualServoCb
+        ).pack()
 
+        self.tap_button_ = tk.Button(
+            self.window_, text="Tap robot", command=self.tapCb
+        ).pack()
 
-        self.window_.mainloop()        
+    @property
+    def window(self):
+        return self.window_
+
+    def handGuideCb(self) -> None:
+        self.get_logger().info("Switching to hand-guiding mode.")
+        self.phase_ = 0        
+        self.class_prob_ = Float64MultiArray(
+            layout=MultiArrayLayout(
+                dim=[
+                    MultiArrayDimension(label="class_probabilities", size=4)
+                ],
+                data_offset=0
+            ),
+            data=[1., 1., 0., 0.]
+        )
+        # self.target_view_ = None
+
+    def visualServoCb(self) -> None:
+        self.get_logger().info("Switching to visual servo mode.")
+        self.phase_ = 1
+        self.class_prob_ = Float64MultiArray(
+            layout=MultiArrayLayout(
+                dim=[
+                    MultiArrayDimension(label="class_probabilities", size=4)
+                ],
+                data_offset=0
+            ),
+            data=[0., 0., 1., 1.]
+        )
+
+    def tapCb(self) -> None:
+        self.get_logger().info("Tapping robot, selecting new target view.")
+        self.phase_ = 2
+        self.target_view_ = self.prev_crp_
 
     def infCb_(self, msg: CameraInfo) -> None:
         self.cam_info_ = msg
 
     def wrenchCb(self, msg: Wrench) -> None:
+        # self.get_logger().info("wrench cb called")
         return
 
     def imgCb_(self, msg: Image) -> None:
+        self.window_.update()
+        phase = Int8(data=self.phase_)
+        self.phase_pub_.publish(phase)
+
         K = self.cam_info_.k.reshape([3, 3])
         d = np.array(self.cam_info_.d.tolist())
         shape = [self.cam_info_.height, self.cam_info_.width]
@@ -139,6 +205,9 @@ class HGenDataCollectNode(Node):
 
             crp = crop_and_resize(img, box, resize_shape).to(self.device_)
 
+            # store crop
+            self.prev_crp_ = crp
+
             # to image
             if self.orb_:
                 crp = (tensor_to_image(crp.cpu(), keepdim=False)*255.).astype(np.uint8)
@@ -146,52 +215,46 @@ class HGenDataCollectNode(Node):
             self.get_logger().warn(e)
             return
 
-        if self.prev_crp_ is not None:
+        # class probability
+        self.class_prob_pub_.publish(self.class_prob_)
+
+        if self.target_view_ is not None:
             # deep homography estimator
             if self.deep_hom_:
-                G, duv = self.h_est_(self.prev_crp_, crp)
-                blend = yt_alpha_blend(self.prev_crp_, warp_perspective(crp, G, crp.shape[-2:]))
+                G, duv = self.h_est_(self.target_view_, crp)
+                blend = yt_alpha_blend(self.target_view_, warp_perspective(crp, G, crp.shape[-2:]))
                 blend = tensor_to_image(blend.cpu(), keepdim=False)
                 G = G.squeeze().numpy()
                 self.hom_pub_.publish(mat3DToMsg(np.linalg.inv(G)))  # inverse!!
             
             # opencv orb
             if self.orb_:
-                G, duv = self.fh_est_ (self.prev_crp_, crp)
-                blend = yt_alpha_blend(self.prev_crp_.astype(float)/255., cv2.warpPerspective(crp.astype(float)/255., np.linalg.inv(G), (crp.shape[1], crp.shape[0])))
+                G, duv = self.fh_est_ (self.target_view_, crp)
+                blend = yt_alpha_blend(self.target_view_.astype(float)/255., cv2.warpPerspective(crp.astype(float)/255., np.linalg.inv(G), (crp.shape[1], crp.shape[0])))
                 self.hom_pub_.publish(mat3DToMsg(G))
             
             # tranformer model
             if self.transformer_:
                 with torch.no_grad():
-                    input = {"image0": kornia.color.rgb_to_grayscale(self.prev_crp_), "image1": kornia.color.rgb_to_grayscale(crp)}
+                    input = {"image0": kornia.color.rgb_to_grayscale(self.target_view_), "image1": kornia.color.rgb_to_grayscale(crp)}
                     correspondence_dict = self.loftr_(input)
+                    if correspondence_dict["keypoints0"].shape[0] < 50 or correspondence_dict["keypoints1"].shape[0] < 50:
+                        return
+                    # self.get_logger().info("shape: {}, {}".format(correspondence_dict["keypoints0"].shape, correspondence_dict["keypoints1"].shape))
                     G, mask = self.ransac_(correspondence_dict["keypoints0"], correspondence_dict["keypoints1"])
-                    blend = yt_alpha_blend(self.prev_crp_, warp_perspective(crp, G.inverse().unsqueeze(0), crp.shape[-2:]))
+                    blend = yt_alpha_blend(self.target_view_, warp_perspective(crp, G.inverse().unsqueeze(0), crp.shape[-2:]))
                     blend = tensor_to_image(blend.cpu(), keepdim=False)
                     G = G.squeeze().cpu().numpy()
                     self.hom_pub_.publish(mat3DToMsg(G)) 
             if self.regi_:
-                G = self.registrator_.register(self.prev_crp_, crp)
-                blend = yt_alpha_blend(self.prev_crp_, warp_perspective(crp, G, crp.shape[-2:]))
+                G = self.registrator_.register(self.target_view_, crp)
+                blend = yt_alpha_blend(self.target_view_, warp_perspective(crp, G, crp.shape[-2:]))
                 blend = tensor_to_image(blend.cpu(), keepdim=False)
                 G = G.squeeze().detach().cpu().numpy()
                 self.hom_pub_.publish(mat3DToMsg(G)) 
   
             cv2.imshow("blend", blend)
 
-            # class probability
-            class_prob = Float64MultiArray(
-                layout=MultiArrayLayout(
-                    dim=[
-                        MultiArrayDimension(label="class_probabilities", size=4)
-                    ],
-                    data_offset=0
-                ),
-                data=[0., 0., 1., 1.]
-            )
-
-            self.class_prob_pub_.publish(class_prob)
 
 
 
@@ -199,10 +262,6 @@ class HGenDataCollectNode(Node):
         # run visual servo, based on target image
         # record
         
-        
-        if not self.init_:
-            self.init_ = True
-            self.prev_crp_ = crp
 
         img = tensor_to_image(img, False)
         # crp = tensor_to_image(crp, False)
@@ -217,9 +276,9 @@ class HGenDataCollectNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    h_gen_node = HGenDataCollectNode("h_gen_data_collect_node")  # blocked by tkinter mainloop
-    # rclpy.spin(h_gen_node)
-    h_gen_node.destroy_node()
+    h_gen_data_collect_node = HGenDataCollectNode("h_gen_data_collect_node")  # blocked by tkinter mainloop
+    rclpy.spin(h_gen_data_collect_node)
+    h_gen_data_collect_node.destroy_node()
     rclpy.shutdown()
 
 if __name__ == "__main__":
