@@ -6,6 +6,7 @@ import rclpy
 import cv_bridge
 import torch
 from typing import List
+import kornia
 from kornia import image_to_tensor, tensor_to_image
 from kornia.geometry import crop_and_resize, warp_perspective
 from rclpy.node import Node
@@ -37,6 +38,7 @@ class HGenNode(Node):
 
     def __init__(self, node_name: str="h_gen_node"):
         super().__init__(node_name=node_name)
+        self.device_ = "cuda"
         self.inf_sub_ = self.create_subscription(CameraInfo, "~/camera_info", self.infCb_, rclpy.qos.qos_profile_system_default)  # launch in node namespace ~/*
         self.img_sub_ = self.create_subscription(Image, "~/image_raw", self.imgCb_, rclpy.qos.qos_profile_system_default)
         self.hom_pub_ = self.create_publisher(Float64MultiArray, "~/G", rclpy.qos.qos_profile_system_default)
@@ -44,10 +46,8 @@ class HGenNode(Node):
         self.wrench_sub_ = self.create_subscription(Wrench, "~/wrench", self.wrenchCb, rclpy.qos.qos_profile_system_default)
         self.class_prob_pub_ = self.create_publisher(Float64MultiArray, "~/class_probabilities", rclpy.qos.qos_profile_system_default)
         self.bridge_ = cv_bridge.CvBridge()
-        self.circle_ = BoundingCircleDetector(model=MODEL.SEGMENTATION.UNET_RESNET_34, device="cuda")
-        self.h_est_ = HomographyEstimator(model=MODEL.HOMOGRAPHY_ESTIMATION.RESNET_34, device="cuda")
-        self.fd_ = cv2.ORB_create()
-        self.fh_est_ = FeatureHomographyEstimation(self.fd_)
+        self.circle_ = BoundingCircleDetector(model=MODEL.SEGMENTATION.UNET_RESNET_34, device=self.device_)
+
         self.get_logger().info("loaded model")
 
         self.center_buffer_ = []
@@ -59,6 +59,27 @@ class HGenNode(Node):
         self.init_ = False
 
         self.prev_crp_ = None
+
+        # which model to use
+        self.deep_hom_ = False
+        self.orb_ = False
+        self.transformer_ = True
+        self.regi_ = False
+
+        if self.deep_hom_:
+            self.h_est_ = HomographyEstimator(model=MODEL.HOMOGRAPHY_ESTIMATION.H_48_RESNET_34, device=self.device_)
+        if self.orb_:
+            self.fd_ = cv2.ORB_create()
+            self.fh_est_ = FeatureHomographyEstimation(self.fd_)
+        if self.transformer_:
+            # transformer loftr
+            self.loftr_ = kornia.feature.LoFTR()
+            self.ransac_ = kornia.geometry.RANSAC(inl_th=1.0)
+            self.loftr_ = self.loftr_.to(self.device_)
+            self.ransac_ = self.ransac_.to(self.device_)
+        if self.regi_:
+            self.registrator_ = kornia.geometry.ImageRegistrator('similarity', num_iterations=1)
+            
 
     def infCb_(self, msg: CameraInfo) -> None:
         self.cam_info_ = msg
@@ -105,25 +126,48 @@ class HGenNode(Node):
 
 
 
-            crp = crop_and_resize(img, box, resize_shape)
+            crp = crop_and_resize(img, box, resize_shape).to(self.device_)
 
             # to image
-            # crp = (tensor_to_image(crp.cpu(), keepdim=False)*255.).astype(np.uint8)
+            if self.orb_:
+                crp = (tensor_to_image(crp.cpu(), keepdim=False)*255.).astype(np.uint8)
         except Exception as e:
             self.get_logger().warn(e)
             return
 
         if self.prev_crp_ is not None:
-            G, duv = self.h_est_(self.prev_crp_, crp)
-            # G, duv = self.fh_est_ (self.prev_crp_, crp)
-            blend = yt_alpha_blend(self.prev_crp_, warp_perspective(crp, G, crp.shape[-2:]))
-            # blend = yt_alpha_blend(self.prev_crp_.astype(float)/255., cv2.warpPerspective(crp.astype(float)/255., np.linalg.inv(G), (crp.shape[1], crp.shape[0])))
-            blend = tensor_to_image(blend.cpu(), keepdim=False)
+            # deep homography estimator
+            if self.deep_hom_:
+                G, duv = self.h_est_(self.prev_crp_, crp)
+                blend = yt_alpha_blend(self.prev_crp_, warp_perspective(crp, G, crp.shape[-2:]))
+                blend = tensor_to_image(blend.cpu(), keepdim=False)
+                G = G.squeeze().numpy()
+                self.hom_pub_.publish(mat3DToMsg(np.linalg.inv(G)))  # inverse!!
+            
+            # opencv orb
+            if self.orb_:
+                G, duv = self.fh_est_ (self.prev_crp_, crp)
+                blend = yt_alpha_blend(self.prev_crp_.astype(float)/255., cv2.warpPerspective(crp.astype(float)/255., np.linalg.inv(G), (crp.shape[1], crp.shape[0])))
+                self.hom_pub_.publish(mat3DToMsg(G))
+            
+            # tranformer model
+            if self.transformer_:
+                with torch.no_grad():
+                    input = {"image0": kornia.color.rgb_to_grayscale(self.prev_crp_), "image1": kornia.color.rgb_to_grayscale(crp)}
+                    correspondence_dict = self.loftr_(input)
+                    G, mask = self.ransac_(correspondence_dict["keypoints0"], correspondence_dict["keypoints1"])
+                    blend = yt_alpha_blend(self.prev_crp_, warp_perspective(crp, G.inverse().unsqueeze(0), crp.shape[-2:]))
+                    blend = tensor_to_image(blend.cpu(), keepdim=False)
+                    G = G.squeeze().cpu().numpy()
+                    self.hom_pub_.publish(mat3DToMsg(G)) 
+            if self.regi_:
+                G = self.registrator_.register(self.prev_crp_, crp)
+                blend = yt_alpha_blend(self.prev_crp_, warp_perspective(crp, G, crp.shape[-2:]))
+                blend = tensor_to_image(blend.cpu(), keepdim=False)
+                G = G.squeeze().detach().cpu().numpy()
+                self.hom_pub_.publish(mat3DToMsg(G)) 
+  
             cv2.imshow("blend", blend)
-
-            # publish as numpy array
-            G = G.squeeze().numpy()
-            self.hom_pub_.publish(mat3DToMsg(np.linalg.inv(G)))  # inverse!!
 
             # class probability
             class_prob = Float64MultiArray(
@@ -133,7 +177,7 @@ class HGenNode(Node):
                     ],
                     data_offset=0
                 ),
-                data=[0., 0., 1., 0.]
+                data=[0., 0., 1., 1.]
             )
 
             self.class_prob_pub_.publish(class_prob)
