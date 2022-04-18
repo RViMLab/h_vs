@@ -1,9 +1,11 @@
 #include <deque>
 #include <memory>
 #include <string>
+#include <vector>
 #include <functional>
 #include <Eigen/Core>
 #include <rclcpp/rclcpp.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <camera_info_manager/camera_info_manager.hpp>
@@ -59,15 +61,53 @@ class HVsNode : public rclcpp::Node {
                 "~/twist",
                 rclcpp::SystemDefaultsQoS()
             );
+
+            paramHandle_ = this->add_on_set_parameters_callback(
+                [this] (const std::vector<rclcpp::Parameter> parameters) -> rcl_interfaces::msg::SetParametersResult {
+                    rcl_interfaces::msg::SetParametersResult result;
+                    result.successful = true;
+                    result.reason = "success";
+
+                    for (auto& param: parameters) {
+                        if (param.get_name() == "lambda_v") {
+                            this->lambda_v_ = Eigen::Vector3d::Map(param.as_double_array().data());
+                            RCLCPP_INFO(this->get_logger(), "Setting parameter lambda_v to %f, %f, %f",this->lambda_v_[0], this->lambda_v_[1], this->lambda_v_[2]);
+                            this->h_vs_->lambdaV(this->lambda_v_);
+                        } else if (param.get_name() == "lambda_w") {
+                            this->lambda_w_ = Eigen::Vector3d::Map(param.as_double_array().data());
+                            RCLCPP_INFO(this->get_logger(), "Setting parameter lambda_w to %f, %f, %f",this->lambda_w_[0], this->lambda_w_[1], this->lambda_w_[2]);
+                            this->h_vs_->lambdaW(this->lambda_w_);
+                        } else if (param.get_name() == "twist_buffer_len") {
+                            RCLCPP_INFO(this->get_logger(), "Setting parameter twist_buffer_len to %d", param.as_int());
+                            this->twist_buffer_len_ = param.as_int();
+                            this->twist_buffer_.clear();
+                        } else if (param.get_name() == "cname") {
+                            RCLCPP_INFO(this->get_logger(), "Setting parameter cname to %s", param.as_string().c_str());
+                            this->cname_ = param.as_string();
+                        } else if (param.get_name() == "url") {
+                            RCLCPP_INFO(this->get_logger(), "Setting parameter url to %s", param.as_string().c_str());
+                            this->url_ = param.as_string();
+                        } else {
+                            result.successful = false;
+                            result.reason = "unkown parameter provided: " + param.get_name();
+                        }
+                    }
+
+                    return result;
+                }
+            );
         }
 
     private:
+        // parameters
         std::unique_ptr<HVs> h_vs_;
         Eigen::Matrix3d K_;
         Eigen::Vector3d lambda_v_, lambda_w_;
 
         std::string cname_, url_;
         std::unique_ptr<camera_info_manager::CameraInfoManager> camera_info_manager_;
+
+
 
         rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr G_sub_;  // projective homography G ~ KHK^(-1), with H Euclidean homography
         rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr K_sub_;  // camera intrinsics
@@ -76,6 +116,9 @@ class HVsNode : public rclcpp::Node {
 
         std::deque<Eigen::VectorXd> twist_buffer_;
         std::size_t twist_buffer_len_;
+
+        // parameter handle
+        rclcpp::Node::OnSetParametersCallbackHandle::SharedPtr paramHandle_;
 
         void GCb(const std_msgs::msg::Float64MultiArray::SharedPtr G_msg) {
             // G_msg to eigen via mapping

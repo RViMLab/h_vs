@@ -30,6 +30,12 @@ class HVs {
         Eigen::MatrixXd K() const { return _K; };  // value-oriented getter and setter
         void K(Eigen::Matrix3d& K) { _K = std::move(K); };
 
+        Eigen::Vector3d lambdaV() const { return _lambda_v; };
+        void lambdaV(Eigen::Vector3d& lambda_v) { _lambda_v = std::move(lambda_v); };
+
+        Eigen::Vector3d lambdaW() const { return _lambda_w; };
+        void lambdaW(Eigen::Vector3d& lambda_w) { _lambda_w = std::move(lambda_w); };
+
     private:
 
         // Camera intrinsics, see eq. 3 paper
