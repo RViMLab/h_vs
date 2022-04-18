@@ -17,7 +17,7 @@ def launch_setup(context, *args, **kwargs):
         executable="h_vs_node",
         parameters=[
             h_vs_params, {
-                "url": "file://" + LaunchConfiguration("url").perform(context), 
+                "url": LaunchConfiguration("url"), 
                 "cname": LaunchConfiguration("cname")
             }],
         remappings=[
@@ -79,10 +79,8 @@ def generate_launch_description():
 
     launch_args.append(DeclareLaunchArgument(
         name="url",
-        default_value=PathJoinSubstitution([
-            FindPackageShare("h_vs"), "config/cam_params.yml"
-        ]),
-        description="Absolut path to camera calibration file."
+        default_value="package://h_vs/config/cam_params.yml",
+        description="Path to camera calibration file."
     ))
 
     launch_args.append(
