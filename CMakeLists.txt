@@ -57,7 +57,7 @@ ament_target_dependencies(${PROJECT_NAME}_node
 
 # add h_gen_node
 install(PROGRAMS
-  scripts/h_gen_node.py DESTINATION lib/${PROJECT_NAME}
+  scripts/h_gen_node.py scripts/h_gen_data_collect_node.py DESTINATION lib/${PROJECT_NAME}
 )
 
 # install libarry and executable
