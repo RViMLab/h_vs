@@ -39,7 +39,7 @@ def launch_setup(context, *args, **kwargs):
                 LaunchConfiguration("cname"), "image_raw/crop"
             ])),
             ("h_gen_data_collect_node/camera_info", PathJoinSubstitution([
-                LaunchConfiguration("cname"), "camera_info/crop"
+                LaunchConfiguration("cname"), "camera_info"
             ])),
             ("h_gen_data_collect_node/wrench", PathJoinSubstitution([
                 LaunchConfiguration("controller"),
